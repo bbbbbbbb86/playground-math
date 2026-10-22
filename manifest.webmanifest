@@ -1,0 +1,22 @@
+{
+  "name": "操場中的數學",
+  "short_name": "操場中的數學",
+  "description": "在 3D 學校操場走動、接任務，練習六年級上學期的數學。",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone"],
+  "orientation": "any",
+  "lang": "zh-Hant-TW",
+  "dir": "ltr",
+  "theme_color": "#dcebf5",
+  "background_color": "#dcebf5",
+  "categories": ["education"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

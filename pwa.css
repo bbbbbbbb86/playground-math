@@ -1,0 +1,124 @@
+/* 操場數學練習器：滿版、安全區與「加入主畫面／全螢幕／更新」介面
+   原則：背景（3D 畫面、天空色）鋪到螢幕邊緣；只有文字、按鈕、搖桿避開瀏海與手勢區。 */
+
+html {
+  height: 100%;
+  background: var(--sky, #dcebf5);
+}
+html, body { margin: 0; padding: 0; }
+body {
+  min-height: 100%;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: var(--sky, #dcebf5);
+}
+#app {
+  /* fixed + inset:0 已經鋪滿；這兩行是不支援 inset 的舊瀏覽器回退 */
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+}
+
+:root {
+  --sa-t: env(safe-area-inset-top, 0px);
+  --sa-r: env(safe-area-inset-right, 0px);
+  --sa-b: env(safe-area-inset-bottom, 0px);
+  --sa-l: env(safe-area-inset-left, 0px);
+}
+
+/* ---- 互動內容避開左右瀏海（手機橫放） ---- */
+.hud { padding-left: calc(12px + var(--sa-l)); padding-right: calc(12px + var(--sa-r)); }
+.home { padding-left: calc(16px + var(--sa-l)); padding-right: calc(16px + var(--sa-r)); }
+.camctl { left: calc(12px + var(--sa-l)); max-width: calc(100% - 84px - var(--sa-l) - var(--sa-r)); }
+.map-toggle { right: calc(12px + var(--sa-r)); }
+.minimap { right: calc(12px + var(--sa-r)); }
+.replay { left: calc(12px + var(--sa-l)); }
+.trays { left: calc(12px + var(--sa-l)); right: calc(12px + var(--sa-r)); bottom: calc(12px + var(--sa-b)); }
+.intro-cap { width: min(680px, calc(100% - 24px - var(--sa-l) - var(--sa-r))); }
+.toast, .coach { max-width: calc(100% - 32px - var(--sa-l) - var(--sa-r)); }
+.modal-back {
+  padding: max(16px, var(--sa-t)) max(16px, var(--sa-r)) max(16px, var(--sa-b)) max(16px, var(--sa-l));
+}
+/* 作答面板在右邊時，避開右側瀏海；在下方時，底部按鈕避開手勢區（原本已處理） */
+@media (orientation: landscape) {
+  .p-head, .p-body, .p-foot { padding-right: calc(14px + var(--sa-r)); }
+}
+@media (orientation: portrait) {
+  .p-head, .p-body, .p-foot { padding-left: calc(14px + var(--sa-l)); padding-right: calc(14px + var(--sa-r)); }
+}
+@media (max-width: 599px), (max-height: 500px) {
+  .camctl { max-width: calc(100% - 76px - var(--sa-l) - var(--sa-r)); }
+}
+
+/* ---- 首頁底部：加入主畫面、全螢幕 ---- */
+.home .foot .pwa-btn { display: inline-flex; align-items: center; gap: 6px; }
+.home .foot .pwa-btn svg { width: 18px; height: 18px; }
+
+/* ---- 加入主畫面教學 ---- */
+.pwa-steps { margin: 4px 0 8px; padding-left: 1.4em; font-size: 17px; line-height: 1.7; }
+.pwa-steps li { margin: 4px 0; }
+.pwa-steps b { color: var(--grass-deeper, #2f5419); }
+.pwa-note { font-size: 15px; color: var(--ink-2, #5b5a52); background: var(--panel, #f6f7f2); border-radius: 12px; padding: 10px 12px; margin: 10px 0 0; }
+.pwa-url { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+.pwa-url code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--panel, #f6f7f2); border: 1px solid var(--line, #d8dbcf); border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+
+/* ---- 首頁「加入主畫面」：單元按鈕下方，附一行說明 ---- */
+.pwa-install {
+  align-self: center;
+  display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
+  max-width: 100%;
+  background: rgba(255, 255, 255, 0.9); border-radius: 999px; box-shadow: var(--shadow);
+  padding: 4px 16px 4px 4px;
+}
+.pwa-install .linkbtn { background: var(--paper, #fff); border-color: var(--grass-deep, #3d6b22); color: var(--grass-deeper, #2f5419); font-weight: 700; min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; gap: 6px; }
+.pwa-install .linkbtn svg { width: 18px; height: 18px; }
+.pwa-install-note { font-size: 14px; color: var(--ink-2, #5b5a52); line-height: 1.4; }
+.pwa-url input { flex: 1; min-width: 0; font-size: 14px; min-height: 44px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line, #d8dbcf); background: var(--panel, #f6f7f2); color: var(--ink, #2b2a26); }
+@media (max-height: 500px) and (orientation: landscape) {
+  .pwa-install { padding: 2px 12px 2px 2px; gap: 8px; }
+  .pwa-install-note { font-size: 12px; }
+}
+@media (max-width: 520px) {
+  .pwa-install { border-radius: 16px; padding: 6px 12px; }
+}
+
+/* ---- 有新版本 ---- */
+.pwa-update {
+  position: fixed; z-index: 60;
+  left: 50%; transform: translateX(-50%);
+  bottom: calc(16px + var(--sa-b));
+  width: max-content; max-width: calc(100% - 32px - var(--sa-l) - var(--sa-r));
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center;
+  background: #2b2a26; color: #fff; border-radius: 16px; padding: 10px 12px 10px 18px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3); font-size: 16px;
+}
+.pwa-update button { min-height: 44px; border-radius: 999px; border: 0; padding: 0 16px; font-size: 15px; font-weight: 700; cursor: pointer; }
+.pwa-update .now { background: var(--star, #f5b82e); color: #2b2a26; }
+.pwa-update .later { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.5); font-weight: 500; }
+
+/* ---- 載入失敗（沒有網路、程式檔沒載到） ---- */
+.pwa-loadfail { position: fixed; inset: 0; display: grid; place-items: center; background: var(--sky, #dcebf5); padding: 16px; z-index: 100; }
+.pwa-loadfail .modal { text-align: center; }
+
+/* ---- 手機橫放（高度不到 500）：首頁精簡，四個單元按鈕和底部按鈕都放得下 ---- */
+@media (max-height: 500px) and (orientation: landscape) {
+  .home { padding-top: calc(10px + var(--sa-t)); padding-bottom: calc(8px + var(--sa-b)); }
+  .home .brand { padding: 6px 14px 8px; }
+  .home h1 { font-size: 24px; }
+  .home .brand p { font-size: 13px; }
+  .home-bottom { gap: 6px; }
+  .units { gap: 8px; }
+  .unit-btn { min-height: 58px; padding: 8px 10px; gap: 8px; grid-template-columns: auto minmax(0, 1fr); }
+  .unit-btn .go { display: none; }
+  .unit-btn .no { width: 34px; height: 34px; font-size: 16px; border-radius: 10px; }
+  .unit-btn .nm { font-size: 16px; line-height: 1.25; }
+  .unit-btn .st { font-size: 12px; }
+  .home .foot .linkbtn { min-height: 44px; padding: 6px 12px; font-size: 14px; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .modal { padding: 14px 16px 14px; }
+  .modal h2 { font-size: 20px; }
+  .modal p { margin-bottom: 6px; }
+  .modal .row { margin-top: 10px; }
+  .avatar-card img, .avatar-card .ph { width: auto; height: min(24vh, 110px); }
+}
