@@ -19,7 +19,7 @@
   var RS_MOVE = { walk: 5, run: 1.7, accel: 10, decel: 14, turn: 12, maxTurn: 14, dead: 0.12, minJoy: 0.35, stride: 1.3 };
   var ut = {
     name: "操場中的數學",
-    appVersion: "2.6.0",
+    appVersion: "2.6.1",
     teacherPassword: "8642",
     questionsPerSession: 9,
     questionsPerSessionOptions: [8, 9, 10],
@@ -5199,7 +5199,7 @@
       clearTimeout(to);
     }
   }
-  async function rs1Refresh(ms = 6e3) {
+  async function rs1Refresh(ms = 1e4) {
     let url = rs1SheetUrl();
     if (!url) return { ok: !1, msg: "還沒設定試算表網址" };
     try {
@@ -8844,7 +8844,12 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
             this.world.clearStation());
           return;
         }
-        !rsIsGuest() && rs1SheetUrl() && (this.toast("讀取老師的設定……", 2e3), await rs1Refresh(3e3));
+        // 2.6.1：Google 試算表第一次回應常要 3～6 秒，原本只等 3 秒，讀不到就沿用舊設定（新試算表預設「關」→ 一直顯示「老師還沒開放」）；改等 8 秒，讀不到時明確提示
+        if (!rsIsGuest() && rs1SheetUrl()) {
+          this.toast("讀取老師的設定……", 8e3);
+          let rr = await rs1Refresh(8e3);
+          rr.ok || this.toast("沒讀到老師的設定，先用上次的設定。若小節顯示「老師還沒開放」，請老師到教師設定按「讀取試算表設定」。", 6e3);
+        }
         let pick = rsIsGuest() ? await rsGuestFlow(this, e.id) : await rs1PickFlow(this, e.id);
         if (!pick) {
           this.world.clearStation();
