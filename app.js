@@ -19,7 +19,7 @@
   var RS_MOVE = { walk: 5, run: 1.7, accel: 10, decel: 14, turn: 12, maxTurn: 14, dead: 0.12, minJoy: 0.35, stride: 1.3 };
   var ut = {
     name: "操場中的數學",
-    appVersion: "2.6.1",
+    appVersion: "2.7.0",
     teacherPassword: "8642",
     questionsPerSession: 9,
     questionsPerSessionOptions: [8, 9, 10],
@@ -4726,11 +4726,10 @@
     }
     return { correct: n, feedback: i, answerText: String(t), isDefault: d };
   }
-  // v1.5.0 入口：mode＝null（還沒選）、"student"、"guest"
-  var RS_ENTRY = { mode: null, look: null, name: "" },
+  // v1.5.0 入口：mode＝null（還沒選）、"student"、"guest"；2.7.0 起學生入口要先選人物、輸入個人密碼，code＝登入的人物代號
+  var RS_ENTRY = { mode: null, look: null, name: "", code: null },
     RS_GMEM = new Map(),
     RS_GKEYS = ["profiles.v1", "records.v1", "lastStudent"],
-    RS_STUDENT_PW = "6666",
     RS_GUEST_CODE = "G",
     RS_NAME_MAX = 8;
   function rsIsGuest() {
@@ -4738,7 +4737,7 @@
   }
   // 換入口：清掉訪客的暫存資料，作答紀錄改從對應的地方重新讀
   function rsSetEntry(mode) {
-    (RS_ENTRY.mode !== mode || mode === "guest") && (RS_GMEM.clear(), (RS_ENTRY.look = null), (RS_ENTRY.name = ""));
+    (RS_ENTRY.mode !== mode || mode === "guest") && (RS_GMEM.clear(), (RS_ENTRY.look = null), (RS_ENTRY.name = ""), (RS_ENTRY.code = null));
     RS_ENTRY.mode = mode;
     try {
       bn = Ic();
@@ -4901,6 +4900,18 @@
     if (n && !/待命名/.test(n)) return n;
     let i = RS1_CODES.indexOf(code);
     return (Ai[i] || Ai[0]).name;
+  }
+  // 2.7.0：學生入口的個人密碼（試算表「人物」分頁的「密碼」欄；沒連線或沒填就用預設 A 0000 … F 0005）與教師設定密碼（試算表「設定」分頁；預設 8642）
+  var RS1_PW_DEFAULT = { A: "0000", B: "0001", C: "0002", D: "0003", E: "0004", F: "0005" };
+  function rs1Password(code) {
+    let r = rs1Remote(),
+      p = r && r.students && r.students[code] && r.students[code].pw;
+    return /^\d{4}$/.test(p || "") ? p : RS1_PW_DEFAULT[code] || "";
+  }
+  function rs1TeacherPw() {
+    let r = rs1Remote(),
+      p = r && r.teacherPw;
+    return /^\d{4}$/.test(p || "") ? p : ut.teacherPassword;
   }
   function rs1Remote() {
     return rs1SheetUrl() ? ar("remote.v1", null) : null;
@@ -5207,7 +5218,7 @@
       if (!r || !r.ok) return { ok: !1, msg: (r && r.error) || "試算表回傳格式不對" };
       let students = {},
         tasks = {};
-      for (let s of r.students || []) RS1_CODES.includes(s.code) && (students[s.code] = { name: s.name, group: s.group });
+      for (let s of r.students || []) RS1_CODES.includes(s.code) && (students[s.code] = { name: s.name, group: s.group, pw: String(s.pw == null ? "" : s.pw).trim() });
       for (let t of r.tasks || []) {
         if (!RS1_CODES.includes(t.code) || !["5", "6", "7"].includes(String(t.unit))) continue;
         tasks[t.code + "|" + t.section] = {
@@ -5218,7 +5229,7 @@
           fade: t.fade === "中重度" ? "中重度" : "一般",
         };
       }
-      (or("remote.v1", { at: Gn(), students, tasks }), rs1AdoptSkills(r.skills));
+      (or("remote.v1", { at: Gn(), students, tasks, teacherPw: String(((r.settings || {}).teacherPassword) == null ? "" : r.settings.teacherPassword).trim() }), rs1AdoptSkills(r.skills));
       return { ok: !0, msg: `已讀取試算表：${Object.keys(students).length} 個人物、${Object.keys(tasks).length} 筆任務設定` };
     } catch (err) {
       return { ok: !1, msg: "連不到試算表，先用上次的設定" };
@@ -5309,7 +5320,7 @@
           T(
             "div",
             { class: "row" },
-            T("button", { type: "button", class: "btn quiet", id: "sec-back", onclick: () => fin("back") }, code === RS_GUEST_CODE ? "換造型" : "換人"),
+            code === RS_GUEST_CODE ? T("button", { type: "button", class: "btn quiet", id: "sec-back", onclick: () => fin("back") }, "換造型") : null,
             T("button", { type: "button", class: "btn quiet", onclick: () => fin(null) }, "回首頁"),
           ),
         ),
@@ -5404,20 +5415,27 @@
       return sec ? { code: RS_GUEST_CODE, section: sec } : null;
     }
   }
-  async function rs1PickFlow(app, unit = "ratio") {
+  // 2.7.0：學生入口先選人物、輸入該人物的密碼；取消密碼就回到選人物，選人物按「回首頁」就回到選入口
+  async function rs1LoginFlow(app) {
     if (!app.thumbs)
       try {
         app.thumbs = app.world.avatarThumbs();
       } catch {
         app.thumbs = {};
       }
+    rs1SheetUrl() && rs1Refresh(1e4); // 背景讀最新的密碼設定；輸入密碼時用當下讀到的
     for (;;) {
       let code = await rs1PickStudent(app.thumbs);
       if (!code) return null;
-      let sec = await rs1PickSection(code, unit);
-      if (sec === "back") continue;
-      return sec ? { code, section: sec } : null;
+      if (await Ac(`${code} ${rs1Name(code)}`, (p) => p === rs1Password(code))) return code;
     }
+  }
+  // 選小節：已經登入，人物固定是登入的人
+  async function rs1PickFlow(app, unit = "ratio") {
+    let code = RS_ENTRY.code;
+    if (!code) return null;
+    let sec = await rs1PickSection(code, unit);
+    return sec && sec !== "back" ? { code, section: sec } : null;
   }
 
   // ---------- 操作元件（基礎題，2D，放在作答面板） ----------
@@ -5781,7 +5799,7 @@
 
   window.__RS1 = {  };
 
-  window.__RS1 = { rs1QNo, RS1_OP, RS1_VENUE, RS1_SECTIONS, RS1_UNITS, RS1_PRESET, Gt, vc, rs1ErrType, rs1AnswerRow, rs1Csv, RS1_ANSWER_COLS };
+  window.__RS1 = { rs1QNo, RS1_OP, RS1_VENUE, RS1_SECTIONS, RS1_UNITS, RS1_PRESET, Gt, vc, rs1ErrType, rs1AnswerRow, rs1Csv, RS1_ANSWER_COLS, rs1Password, rs1TeacherPw };
 
   // ---------- 新任務通知：題目一出來就跳出「新任務＋地點」 ----------
   function rs1Notice(app, cur) {
@@ -7745,6 +7763,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     function o() {
       (Xt(t),
         t.append(T("h2", {}, "教師設定")),
+        t.append(T("p", { class: "muted", id: "app-version", style: { fontSize: "13px", margin: "0 0 8px" } }, `版本 ${ut.appVersion}`)),
         t.append(T("p", {}, "這裡的設定只存在這台裝置。要讓每台平板都一樣，請告訴 Claude 修改預設值後重新發布。")),
         Tu() || t.append(T("p", { class: "confirmbox" }, "這個瀏覽器不允許儲存資料，重新整理後紀錄會消失。請記得下載紀錄。")),
         t.append(T("h3", {}, "學生")));
@@ -7807,10 +7826,6 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       h.addEventListener("change", () => {
         ((e.sound = h.checked), a(h.checked ? "音效已開啟。" : "音效已關閉。"));
       });
-      let pw = T("input", { type: "checkbox", id: "require-password", checked: rsNeedPassword() });
-      pw.addEventListener("change", () => {
-        ((e.requirePassword = pw.checked), a(pw.checked ? "進入單元時要輸入密碼。" : "進入單元不用輸入密碼。"));
-      });
       let cd = T("input", { type: "checkbox", id: "require-code", checked: rsNeedCode() });
       cd.addEventListener("change", () => {
         ((e.requireCode = cd.checked), a(cd.checked ? "進入單元時要輸入學生代碼（S01～S03）。" : "不用輸入學生代碼，紀錄的代碼會是「訪客」。"));
@@ -7837,7 +7852,6 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
             T("label", { class: "ck" }, "每個小節題數 ", l),
             T("label", { class: "ck" }, h, "音效"),
             T("label", { class: "ck" }, d, "允許調整視角"),
-            T("label", { class: "ck" }, pw, "進入單元要輸入密碼（只對學生入口；學生入口本身一律要輸入 6666）"),
             T("label", { class: "ck" }, pg, "開放遊樂設施（溜滑梯、鞦韆、旋轉塔、投籃、涼亭）"),
             T("label", { class: "ck" }, "畫質 ", p),
           ),
@@ -8730,8 +8744,10 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
           this.app.classList.remove("mode-home", "mode-explore", "mode-answer", "mode-summary", "mode-intro", "mode-play"),
           this.app.classList.add("mode-" + e));
       }
-      goHome() {
-        (rsSetEntry(null), (RS1_CUR = null), rs1ApplyBody(), this.world && (rsShowNpcs(this.world, ["court", "stage", "grass"]), rsTeachersHome(this.world), rsBoardRefresh(this.world, rsBoardCode())));
+      goHome(keep) {
+        // 2.7.0：練習中或練習完按「回首頁」（keep）時，學生維持登入、回到單元首頁；其他情況回到選入口
+        let keepCode = keep && RS_ENTRY.mode === "student" ? RS_ENTRY.code : null;
+        (rsSetEntry(null), keepCode && ((RS_ENTRY.mode = "student"), (RS_ENTRY.code = keepCode)), (RS1_CUR = null), rs1ApplyBody(), this.world && (rsShowNpcs(this.world, ["court", "stage", "grass"]), rsTeachersHome(this.world), rsBoardRefresh(this.world, rsBoardCode())));
         (this.play && this.exitPlay(!0),
           va(),
           (this.session = null),
@@ -8782,7 +8798,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
                 "span",
                 {},
                 T("span", { class: "nm" }, n.name),
-                T("span", { class: "st" }, !n.ready ? "內容準備中" : rsNeedPassword() && !rsIsGuest() ? "需要密碼" : "點一下開始"),
+                T("span", { class: "st" }, !n.ready ? "內容準備中" : "點一下開始"),
               ),
               T("span", { class: "go", html: et.chevron }),
             ),
@@ -8792,8 +8808,8 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
           ? T(
               "div",
               { class: "rs-who", id: "rs-who" },
-              T("span", {}, rsIsGuest() ? "訪客入口・這次的紀錄不會保存" : "學生入口"),
-              T("button", { type: "button", class: "linkbtn", id: "entry-switch", onclick: qt(() => this.onEntry(null)) }, "換入口"),
+              T("span", { id: "rs-who-name" }, rsIsGuest() ? "訪客入口・這次的紀錄不會保存" : `${RS_ENTRY.code || ""} ${rs1Name(RS_ENTRY.code)}`),
+              T("button", { type: "button", class: "linkbtn", id: "entry-switch", onclick: qt(() => this.onEntry(null)) }, rsIsGuest() ? "換入口" : "換人"),
             )
           : null;
         let t = T(
@@ -8816,27 +8832,25 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         this.overlay.append(t);
       }
       async onEntry(mode) {
-        if (mode === "student" && !(await Ac("學生入口", (p) => p === RS_STUDENT_PW))) return;
-        (rsSetEntry(mode), this.removeOverlay(".home"), this.renderHome());
+        let code = null;
+        if (mode === "student" && !(code = await rs1LoginFlow(this))) return;
+        (rsSetEntry(mode), code && (RS_ENTRY.code = code), this.removeOverlay(".home"), this.renderHome());
         let f = document.querySelector(mode ? ".home .units .unit-btn" : "#entry-student");
         f && f.focus && f.focus();
       }
       async onTeacher() {
-        (await Ac("教師設定", (t) => t === ut.teacherPassword)) &&
+        (await Ac("教師設定", (t) => t === rs1TeacherPw())) &&
           Wu(() => {
             (Uc(lr()), this.world.qualityMode !== rs() && this.world.setQuality(rs()));
             for (let u of xc) {
               let el = document.querySelector(`#unit-${u.id} .st`);
-              el && (el.textContent = !u.ready ? "內容準備中" : rsNeedPassword() && !rsIsGuest() ? "需要密碼" : "點一下開始");
+              el && (el.textContent = !u.ready ? "內容準備中" : "點一下開始");
             }
           });
       }
       async onUnit(e) {
         if (!RS_ENTRY.mode) return;
-        if ((this.world.highlightStation(e.station), rsNeedPassword() && !rsIsGuest() && !(await Ac(e.name, (r) => r === e.password)))) {
-          this.world.clearStation();
-          return;
-        }
+        this.world.highlightStation(e.station);
         if (!e.ready) {
           (await Mc(`「${e.name}」內容準備中`, "這個單元的題目還在準備，完成後會再開放。", [
             { key: "home", label: "返回首頁", primary: !0 },
@@ -9453,7 +9467,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
                   class: "btn primary",
                   id: "btn-summary-home",
                   onclick: () => {
-                    (c.close(), this.goHome());
+                    (c.close(), this.goHome(!0));
                   },
                 },
                 "回首頁",
@@ -9482,18 +9496,18 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
           if (r !== "leave") return;
           e.leave();
         }
-        this.goHome();
+        this.goHome(!0);
       }
-      // 回到選小節：保留入口（學生不用再輸入 6666；訪客的名字、造型和這次的星星都保留）
+      // 回到選小節：保留入口（學生不用再輸入密碼；訪客的名字、造型和這次的星星都保留）
       async rsToSections() {
         let S = this.session,
           code = S && S.code,
           unit = this.unit;
         if (!code || !unit) return this.goHome();
-        let keep = { mode: RS_ENTRY.mode, look: RS_ENTRY.look, name: RS_ENTRY.name },
+        let keep = { mode: RS_ENTRY.mode, look: RS_ENTRY.look, name: RS_ENTRY.name, code: RS_ENTRY.code },
           mem = new Map(RS_GMEM);
         this.goHome();
-        ((RS_ENTRY.mode = keep.mode), (RS_ENTRY.look = keep.look), (RS_ENTRY.name = keep.name));
+        ((RS_ENTRY.mode = keep.mode), (RS_ENTRY.look = keep.look), (RS_ENTRY.name = keep.name), (RS_ENTRY.code = keep.code));
         for (let [k, v] of mem) RS_GMEM.set(k, v);
         try {
           bn = Ic();
