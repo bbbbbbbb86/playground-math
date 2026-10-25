@@ -19,7 +19,7 @@
   var RS_MOVE = { walk: 5, run: 1.7, accel: 10, decel: 14, turn: 12, maxTurn: 14, dead: 0.12, minJoy: 0.35, stride: 1.3 };
   var ut = {
     name: "操場中的數學",
-    appVersion: "2.7.0",
+    appVersion: "2.9.0",
     teacherPassword: "8642",
     questionsPerSession: 9,
     questionsPerSessionOptions: [8, 9, 10],
@@ -829,7 +829,9 @@
       if (i.failed && !i.solved) {
         let last = n.index + 1 >= n.total;
         g.append(
-          i.giveUp
+          i.teacherLock
+            ? T("button", { type: "button", class: "btn primary", id: "btn-teacher-unlock", onclick: qt(() => this.on.unlock && this.on.unlock()) }, "🔒 請老師解鎖")
+            : i.giveUp
             ? T("button", { type: "button", class: "btn primary", id: "btn-next", onclick: qt(() => this.on.next()) }, last ? "完成練習" : "下一個任務")
             : T("button", { type: "button", class: "btn primary", id: "btn-retry", onclick: qt(() => this.on.retry && this.on.retry()) }, "重新接任務（換一題類似題）"),
         );
@@ -1050,9 +1052,11 @@
             // v2.3.0：答錯 → 說明錯在哪裡，這個任務失敗；要重新接一題類似題（第 3 次失敗才看完整解說）
             (e.feedback = {
               kind: "wrong",
-              html: `<div class="rs-fb-h"><i aria-hidden="true">✗</i>任務失敗：${e.q.steps.length > 1 ? `第 ${t.step + 1} 步` : "這一題"}答錯了</div><b>錯在哪裡：</b>${bt(r.feedback || "這個答案不對。")}${e.focus.length ? `<br>看題目裡標出來的：${e.focus.map((x) => `「${Si(x)}」`).join("")}` : ""}${
-                r.giveUp
-                  ? `<div class="rs-solution"><b>完整解說：</b>${e.q.steps.map((x, k) => `<div>${e.q.steps.length > 1 ? `第 ${k + 1} 步：` : ""}${bt(x.explanation || "")}</div>`).join("")}</div><br>這個任務已經試了 ${r.failCount} 次，先看懂上面的解說，等一下請老師陪你再看一次。`
+              html: `<div class="rs-fb-h"><i aria-hidden="true">✗</i>${r.guidedWrong ? "答案不對，再試一次（老師帶著做，不算失敗）" : `任務失敗：${e.q.steps.length > 1 ? `第 ${t.step + 1} 步` : "這一題"}答錯了`}</div><b>錯在哪裡：</b>${bt(r.feedback || "這個答案不對。")}${e.focus.length ? `<br>看題目裡標出來的：${e.focus.map((x) => `「${Si(x)}」`).join("")}` : ""}${
+                r.guidedWrong
+                  ? "<br>和老師一起想一想，需要的話可以按「提示」，再試一次。"
+                  : r.giveUp
+                  ? `<div class="rs-solution"><b>完整解說：</b>${e.q.steps.map((x, k) => `<div>${e.q.steps.length > 1 ? `第 ${k + 1} 步：` : ""}${bt(x.explanation || "")}</div>`).join("")}</div><br>這個任務已經試了 ${r.failCount} 次，先看懂上面的解說。${t.teacherLock ? "<b>請舉手找老師</b>，老師來了才能繼續。" : "等一下請老師陪你再看一次。"}`
                   : `<br>想一想錯在哪裡，再去找老師<b>重新接任務</b>，會換一題類似的題目（第 ${r.failCount} 次）。`
               }`,
             })),
@@ -4913,6 +4917,22 @@
       p = r && r.teacherPw;
     return /^\d{4}$/.test(p || "") ? p : ut.teacherPassword;
   }
+  // 2.9.0：同一個任務失敗第 3 次時，畫面鎖住等老師（試算表「設定」分頁「失敗三次後」填「直接繼續」可關掉；預設要等老師）
+  function rs1WaitTeacher() {
+    let r = ar("remote.v1", null);
+    return !(r && r.failMode === "直接繼續");
+  }
+  function rs1LockGet(code) {
+    return ((ar("lock.v1", {}) || {})[code]) || null;
+  }
+  function rs1LockSet(code, info) {
+    let m = ar("lock.v1", {}) || {};
+    ((m[code] = info), or("lock.v1", m));
+  }
+  function rs1LockClear(code) {
+    let m = ar("lock.v1", {}) || {};
+    code in m && (delete m[code], or("lock.v1", m));
+  }
   function rs1Remote() {
     return rs1SheetUrl() ? ar("remote.v1", null) : null;
   }
@@ -5091,7 +5111,8 @@
       題目文字: q.prompt,
       正確答案: q.correctAnswer,
       首次送出的答案: q.firstAnswer == null ? "" : vc(String(q.firstAnswer)),
-      首次正誤: q.firstCorrect == null ? "" : q.firstCorrect ? "正確" : "錯誤",
+      // 2.9.0：老師帶做的那題不算首次正誤（留空），試算表的正確率不受影響
+      首次正誤: q.guided || q.firstCorrect == null ? "" : q.firstCorrect ? "正確" : "錯誤",
       錯誤類型: q.firstCorrect === !1 ? q.errType || RS1_ERR_OTHER : "",
       有效作答次數: q.validSubmissionCount,
       "經過時間（秒）": q.elapsedMs == null ? "" : Math.round(q.elapsedMs / 1e3),
@@ -5145,7 +5166,19 @@
     return RS1_ERR_OTHER;
   }
   function rs1Result(q) {
-    return q.failed ? (q.needsTeacher ? "失敗（第 3 次，需要老師協助）" : "失敗，重新接任務") : q.completedAt ? "完成" : "未完成";
+    if (q.guided) return q.completedAt ? "完成（老師帶做）" : "未完成（老師帶做）";
+    // 「需要老師協助」這幾個字不能改：試算表人物摘要用它來數
+    return q.failed
+      ? q.needsTeacher
+        ? q.teacherHelp === "guided"
+          ? "失敗（第 3 次，需要老師協助；已由老師帶做）"
+          : q.teacherHelp === "deferred"
+            ? "失敗（第 3 次，需要老師協助；待老師處理）"
+            : "失敗（第 3 次，需要老師協助）"
+        : "失敗，重新接任務"
+      : q.completedAt
+        ? "完成"
+        : "未完成";
   }
   var RS1_ANSWER_COLS = [
     "練習編號", "日期", "組別", "人物代號", "人物顯示", "任務順序", "單元", "小節", "題型", "數字組編號", "難度", "場地", "題目文字", "正確答案",
@@ -5229,13 +5262,93 @@
           fade: t.fade === "中重度" ? "中重度" : "一般",
         };
       }
-      (or("remote.v1", { at: Gn(), students, tasks, teacherPw: String(((r.settings || {}).teacherPassword) == null ? "" : r.settings.teacherPassword).trim() }), rs1AdoptSkills(r.skills));
+      (or("remote.v1", { at: Gn(), students, tasks, teacherPw: String(((r.settings || {}).teacherPassword) == null ? "" : r.settings.teacherPassword).trim(), failMode: String(((r.settings || {}).failMode) == null ? "" : r.settings.failMode).trim() }), rs1AdoptSkills(r.skills));
       return { ok: !0, msg: `已讀取試算表：${Object.keys(students).length} 個人物、${Object.keys(tasks).length} 筆任務設定` };
     } catch (err) {
       return { ok: !1, msg: "連不到試算表，先用上次的設定" };
     }
   }
   (window.addEventListener("online", () => rs1Flush()), setInterval(() => rs1Flush(), 6e4));
+
+  // ---------- v2.8.0：學生歷史（換平板後還原星星、結算畫面「和上次比」） ----------
+  // 試算表的「練習紀錄」（完成狀態）加「作答紀錄」（首次正誤）算出每次完成的練習：{ id, section, n（任務數）, first（第一次接就答對的任務數）}
+  function rs1IdTime(id) {
+    let m = /^[^-]+-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/.exec(String(id || ""));
+    return m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}` : Vn(Gn());
+  }
+  function rs1LocalPractices(code) {
+    let out = [];
+    try {
+      for (let a of Cc()) {
+        if (a.studentCode !== code || a.status !== "completed" || !a.section) continue;
+        let base = (a.questions || []).filter((q) => (q.tryNo || 1) === 1);
+        out.push({ id: a.attemptId, section: a.section, n: base.length, first: base.filter((q) => q.firstCorrect === !0).length });
+      }
+    } catch {}
+    return out;
+  }
+  // 試算表讀回來的加上這台平板自己的（還沒上傳的也算），同一次練習以本機為準
+  function rs1Practices(code) {
+    let remote = ((ar("history.v1", {}) || {})[code] || {}).practices || [],
+      map = new Map();
+    for (let p of remote) p && p.id && map.set(p.id, p);
+    for (let p of rs1LocalPractices(code)) map.set(p.id, p);
+    return [...map.values()].sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+  }
+  function rs1RestoreDone(code, practices) {
+    let p = zn(code),
+      d = (p.secDone = p.secDone || {}),
+      changed = !1;
+    for (let x of practices || []) {
+      if (!x || !RS1_SECTIONS.some((s) => s.id === x.section)) continue;
+      (!d[x.section] || d[x.section] > rs1IdTime(x.id)) && ((d[x.section] = rs1IdTime(x.id)), (changed = !0));
+    }
+    changed && hr(code, p);
+    return changed;
+  }
+  async function rs1LoadHistory(code, ms = 8e3) {
+    let url = rs1SheetUrl();
+    if (!url || !code || code === RS_GUEST_CODE) return { ok: !1, changed: !1 };
+    try {
+      let r = await rs1Fetch(url + (url.includes("?") ? "&" : "?") + "action=history&key=" + encodeURIComponent(Ti().sheetKey || "") + "&code=" + encodeURIComponent(code), { method: "GET" }, ms);
+      if (!r || !r.ok || !Array.isArray(r.practices)) return { ok: !1, changed: !1 };
+      let list = r.practices.map((x) => ({ id: String(x.id), section: String(x.section), n: Number(x.n) || 0, first: Number(x.first) || 0 })),
+        all = ar("history.v1", {}) || {};
+      ((all[code] = { at: Gn(), practices: list }), or("history.v1", all));
+      return { ok: !0, changed: rs1RestoreDone(code, list) };
+    } catch {
+      return { ok: !1, changed: !1 };
+    }
+  }
+  // 結算畫面的成果卡：這次成果、和自己比（只顯示進步或持平）、個人最佳、下一步；不比別人、不顯示時間
+  function rs1ResultCard(sess) {
+    if (!sess || !sess.section) return null;
+    let a = sess.attempt,
+      base = (a.questions || []).filter((q) => (q.tryNo || 1) === 1),
+      n = base.length,
+      first = base.filter((q) => q.firstCorrect === !0).length,
+      noHint = base.filter((q) => q.firstCorrect === !0 && !q.hintBeforeFirstSubmit).length,
+      lines = [];
+    if (!n) return null;
+    lines.push(T("p", { id: "rs-res-now", style: { margin: "4px 0", fontWeight: "700" } }, `這次：${n} 題中，${first} 題一次就答對`));
+    noHint > 0 && lines.push(T("p", { id: "rs-res-nohint", style: { margin: "4px 0" } }, `其中 ${noHint} 題不用提示就答對`));
+    if (!rsIsGuest()) {
+      let others = rs1Practices(sess.code).filter((x) => x.id !== a.attemptId && x.n > 0),
+        ratio = first / n;
+      if (!others.length) lines.push(T("p", { id: "rs-res-cmp", style: { margin: "4px 0" } }, "這是你的第一次完成，加油！"));
+      else {
+        let prev = others[others.length - 1],
+          pr = prev.first / prev.n;
+        if (ratio > pr + 1e-9) lines.push(T("p", { id: "rs-res-cmp", style: { margin: "4px 0" } }, `進步了！上一次（${prev.section}）是 ${prev.n} 題中 ${prev.first} 題，這次 ${n} 題中 ${first} 題。`));
+        else if (Math.abs(ratio - pr) < 1e-9) lines.push(T("p", { id: "rs-res-cmp", style: { margin: "4px 0" } }, `和上一次（${prev.section}）一樣穩，繼續保持。`));
+        if (ratio > Math.max(...others.map((x) => x.first / x.n)) + 1e-9) lines.push(T("p", { id: "rs-res-best", style: { margin: "4px 0", fontWeight: "700" } }, "★ 這是你最好的一次！"));
+      }
+    }
+    let i = RS1_SECTIONS.findIndex((x) => x.id === sess.section),
+      nx = i >= 0 ? RS1_SECTIONS[i + 1] : null;
+    nx && lines.push(T("p", { id: "rs-res-next", style: { margin: "4px 0", color: "#555" } }, `下一個小節：${nx.id} ${nx.name}`));
+    return T("div", { id: "rs-result", style: { background: "#f3f9ee", border: "2px solid #7fb24a", borderRadius: "12px", padding: "8px 14px", margin: "8px 0", textAlign: "left" } }, lines);
+  }
 
   // ---------- 選人物、選小節 ----------
   function rs1PickStudent(thumbs) {
@@ -5799,7 +5912,7 @@
 
   window.__RS1 = {  };
 
-  window.__RS1 = { rs1QNo, RS1_OP, RS1_VENUE, RS1_SECTIONS, RS1_UNITS, RS1_PRESET, Gt, vc, rs1ErrType, rs1AnswerRow, rs1Csv, RS1_ANSWER_COLS, rs1Password, rs1TeacherPw };
+  window.__RS1 = { rs1QNo, RS1_OP, RS1_VENUE, RS1_SECTIONS, RS1_UNITS, RS1_PRESET, Gt, vc, rs1ErrType, rs1AnswerRow, rs1Csv, RS1_ANSWER_COLS, rs1Password, rs1TeacherPw, rs1LoadHistory, rs1Practices, rs1ResultCard, rs1WaitTeacher, rs1LockGet };
 
   // ---------- 新任務通知：題目一出來就跳出「新任務＋地點」 ----------
   function rs1Notice(app, cur) {
@@ -5895,6 +6008,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     let r = cur.rec,
       q = cur.q;
     q.level === "basic" &&
+      !cur.guided &&
       (cur.fade = rs1Fade(sess.code, q.typeId, r.firstCorrect === !0, !!r.opBeforeFirst || r.hintBeforeFirstSubmit, RS1_CUR ? RS1_CUR.task.fade : "一般"));
     rs1Enqueue("作答紀錄", rs1AnswerRow(sess.attempt, r));
   }
@@ -7193,7 +7307,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         c.last = a.lastActivityAt || a.startedAt;
         // v2.4.0：分開算「第一次接就完成」（只看第一次接的任務）和「重新接任務後才完成」
         for (let q of a.questions || []) {
-          if (!q.completedAt) continue;
+          if (!q.completedAt || q.guided) continue;
           let first = (q.tryNo || 1) === 1;
           (c.q++, first && c.firstN++, first && q.firstCorrect === !0 && c.first++, !first && q.firstCorrect === !0 && c.retryDone++, q.needsTeacher && c.help++);
         }
@@ -7587,7 +7701,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     ((bn = { attempts: {}, order: [] }), fa());
   }
   function as(s) {
-    let e = s.questions.filter((n) => n.completedAt),
+    let e = s.questions.filter((n) => n.completedAt && !n.guided),
       t = (n) => n.firstCorrect === !0;
     return {
       planned: s.plannedCount,
@@ -8081,12 +8195,13 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
           solved: !1,
           accepted: !1,
         }),
+        this.guidedPending && ((this.cur.guided = !0), (this.guidedPending = !1)),
         this.cur
       );
     }
     accept() {
       let e = this.prepare();
-      return (!e || e.accepted || ((e.accepted = !0), (e.rec = _u(this.attempt, e.q, this.index, this.cfg.tools)), (e.rec.tryNo = ((this.fails || {})[this.index] || 0) + 1), rs1OnAccept(this, e)), e);
+      return (!e || e.accepted || ((e.accepted = !0), (e.rec = _u(this.attempt, e.q, this.index, this.cfg.tools)), (e.rec.tryNo = ((this.fails || {})[this.index] || 0) + 1), e.guided && (e.rec.guided = !0), rs1OnAccept(this, e)), e);
     }
     get step() {
       return this.cur ? this.cur.q.steps[this.cur.step] : null;
@@ -8106,17 +8221,23 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
             : ((t.solved = !0),
               (r.questionDone = !0),
               Yu(this.attempt, t.rec),
-              ju(this.code, this.unitId, t.q.typeId, t.rec.firstCorrect === !0),
+              t.guided || ju(this.code, this.unitId, t.q.typeId, t.rec.firstCorrect === !0),
               Uu(this.code, t.q.qid),
               rs1OnDone(this, t)));
       else {
         // v2.3.0：答錯就是這個任務失敗（顯示錯誤原因），要重新接一題類似題（同題型、換一組數字）；
         // 同一個任務失敗第 3 次：顯示完整解說、記「需要老師協助」，接著做下一個任務
+        // 2.9.0：老師帶做的那題，答錯只提示再試，不算任務失敗
+        if (t.guided) return (t.wrong[t.step]++, (r.guidedWrong = !0), r);
         t.wrong[t.step]++;
         this.fails = this.fails || {};
         let f = (this.fails[this.index] = (this.fails[this.index] || 0) + 1);
         ((t.failed = !0), (t.failStep = t.step), (t.giveUp = f >= RS_FAIL_MAX), (r.failed = !0), (r.failCount = f), (r.giveUp = t.giveUp));
         t.giveUp && !t.rec.needsTeacher && Fu(this.attempt, t.rec);
+        // 2.9.0：第 3 次失敗 → 畫面鎖住等老師（訪客不鎖）
+        t.teacherLock = !!(t.giveUp && this.section && !rsIsGuest() && rs1WaitTeacher());
+        r.teacherLock = t.teacherLock;
+        t.teacherLock && rs1LockSet(this.code, { section: this.section, index: this.index, attemptId: this.attempt.attemptId, at: Gn() });
         t.rec.errType = rs1ErrType(i.feedback, i.isDefault, t.q.typeId);
         ((t.rec.failed = !0), Yu(this.attempt, t.rec), ju(this.code, this.unitId, t.q.typeId, !1), Uu(this.code, t.q.qid), rs1OnDone(this, t));
       }
@@ -8126,6 +8247,14 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     retry() {
       let t = this.cur;
       return !t || !t.failed || t.giveUp ? !1 : ((this.retryOf = { qid: t.q.qid, station: t.q.station }), (this.cur = null), !0);
+    }
+    // 2.9.0：老師解鎖後，選「帶著做一題」或「稍後處理」
+    resolveLock(how) {
+      let t = this.cur;
+      if (!t || !t.teacherLock) return !1;
+      ((t.teacherLock = !1), rs1LockClear(this.code), (t.rec.teacherHelp = how === "guided" ? "guided" : "deferred"), rs1Enqueue("作答紀錄", rs1AnswerRow(this.attempt, t.rec)), Pi(this.attempt));
+      how === "guided" && ((this.guidedPending = !0), (this.retryOf = { qid: t.q.qid, station: t.q.station }), (this.cur = null));
+      return !0;
     }
     hint() {
       let e = this.cur;
@@ -8666,6 +8795,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
             tool: (t) => this.session.tool(t),
             next: () => this.onNext(),
             retry: () => this.onRetry(),
+            unlock: () => this.onUnlock(),
             speak: (t, n) => this.say(t, n),
           })));
         let e = this.world;
@@ -8834,7 +8964,15 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       async onEntry(mode) {
         let code = null;
         if (mode === "student" && !(code = await rs1LoginFlow(this))) return;
+        // 2.9.0：上次失敗三次後還沒讓老師處理就重新整理或關掉網頁，這位學生登入時仍要先請老師解鎖
+        while (code && rs1WaitTeacher() && rs1LockGet(code)) {
+          let k = await Mc("需要老師協助", `${code} ${rs1Name(code)} 上一題失敗了三次，請舉手找老師。`, [{ key: "unlock", label: "老師解鎖", primary: !0 }, { key: "back", label: "回首頁" }]);
+          if (k !== "unlock") return;
+          (await Ac("老師解鎖", (p) => p === rs1TeacherPw())) && rs1LockClear(code);
+        }
         (rsSetEntry(mode), code && (RS_ENTRY.code = code), this.removeOverlay(".home"), this.renderHome());
+        // 2.8.0：登入後在背景向試算表要這位學生的歷史（換平板也能還原星星）；離線或讀不到就用這台平板的資料
+        code && rs1LoadHistory(code).then((h) => { if (h.changed && RS_ENTRY.code === code) try { rsBoardRefresh(this.world, code); } catch {} });
         let f = document.querySelector(mode ? ".home .units .unit-btn" : "#entry-student");
         f && f.focus && f.focus();
       }
@@ -8861,7 +8999,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         // 2.6.1：Google 試算表第一次回應常要 3～6 秒，原本只等 3 秒，讀不到就沿用舊設定（新試算表預設「關」→ 一直顯示「老師還沒開放」）；改等 8 秒，讀不到時明確提示
         if (!rsIsGuest() && rs1SheetUrl()) {
           this.toast("讀取老師的設定……", 8e3);
-          let rr = await rs1Refresh(8e3);
+          let [rr] = await Promise.all([rs1Refresh(8e3), rs1LoadHistory(RS_ENTRY.code, 8e3)]);
           rr.ok || this.toast("沒讀到老師的設定，先用上次的設定。若小節顯示「老師還沒開放」，請老師到教師設定按「讀取試算表設定」。", 6e3);
         }
         let pick = rsIsGuest() ? await rsGuestFlow(this, e.id) : await rs1PickFlow(this, e.id);
@@ -9358,6 +9496,21 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         if (!e || !e.retry()) return;
         (va(), this.panel.close(), this.removeOverlay(".trays, .replay"), this.setMode("explore"), this.world.setMode("explore"), this.renderNav(), this.activateTask(), requestAnimationFrame(() => this.world.resize()));
       }
+      // 2.9.0：第 3 次失敗後鎖住，老師輸入教師密碼解鎖，選「帶著做一題」或「稍後處理」
+      async onUnlock() {
+        let e = this.session;
+        if (!e || !e.cur || !e.cur.teacherLock) return;
+        if (!(await Ac("老師解鎖", (p) => p === rs1TeacherPw()))) return;
+        let k = await Mc("老師要怎麼處理？", "「帶著做一題」：換一題類似題，老師陪學生做；這題答錯不算失敗，也不影響操作階段和首次答對的統計。「稍後處理」：先記下待老師協助，學生繼續下一個任務。", [
+          { key: "guided", label: "老師帶著做一題", primary: !0 },
+          { key: "later", label: "稍後處理（記為待老師協助）" },
+          { key: "cancel", label: "取消，繼續鎖定" },
+        ]);
+        if (k !== "guided" && k !== "later") return;
+        if (!e.resolveLock(k)) return;
+        if (k === "guided") (va(), this.panel.close(), this.removeOverlay(".trays, .replay"), this.setMode("explore"), this.world.setMode("explore"), this.renderNav(), this.activateTask(), requestAnimationFrame(() => this.world.resize()));
+        else this.panel.render();
+      }
       onNext() {
         let e = this.session;
         if (!(!e || !e.next())) {
@@ -9416,6 +9569,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
               : e
                 ? T("div", { class: "lit" }, `你在操場上點亮了：${e.name}`)
                 : T("div", { class: "lit" }, "操場上的收集物都點亮了！"),
+            rs1ResultCard(t),
             T(
               "div",
               { class: "stats" },
@@ -9490,6 +9644,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       }
       async onHomeButton() {
         let e = this.session;
+        if (e && e.cur && e.cur.teacherLock) return void this.toast("這題需要老師解鎖才能離開。", 3e3);
         if (e && !e.done) {
           let r = await pu();
           if (r === "sections") return (e.leave(), this.rsToSections());
