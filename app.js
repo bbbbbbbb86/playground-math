@@ -19,7 +19,7 @@
   var RS_MOVE = { walk: 5, run: 1.7, accel: 10, decel: 14, turn: 12, maxTurn: 14, dead: 0.12, minJoy: 0.35, stride: 1.3 };
   var ut = {
     name: "操場中的數學",
-    appVersion: "2.9.0",
+    appVersion: "3.0.0",
     teacherPassword: "8642",
     questionsPerSession: 9,
     questionsPerSessionOptions: [8, 9, 10],
@@ -5351,12 +5351,42 @@
   }
 
   // ---------- 選人物、選小節 ----------
+  // v3.0：選角畫面左邊的大型展示臺（人物會慢慢轉，可以用手指轉著看）；建不起來（沒有 3D）就不顯示，選角照常可用
+  function rsLookStage() {
+    let cv = T("canvas", { class: "rs-stage-cv", "aria-hidden": "true" }),
+      nm = T("div", { class: "rs-stage-name", id: "rs-stage-name" }, ""),
+      box = T("div", { class: "rs-stage", id: "rs-stage" }, cv, nm, T("div", { class: "rs-stage-hint" }, "用手指左右滑，轉一轉")),
+      api = null;
+    return {
+      el: box,
+      show(id, name) {
+        nm.textContent = name || "";
+        box.classList.toggle("rs-stage-empty", !id);
+        if (!api && id) {
+          let w = window.__pgm && window.__pgm.world;
+          try {
+            api = w && w.avatarStage ? w.avatarStage(cv) : null;
+          } catch {
+            api = null;
+          }
+          api || (box.style.display = "none");
+        }
+        api && api.show(id);
+      },
+      close() {
+        api && api.dispose();
+        api = null;
+      },
+    };
+  }
   function rs1PickStudent(thumbs) {
     return new Promise((done) => {
       let sel = ar("lastStudent", null),
         grid = T("div", { class: "avatars rs-students", role: "radiogroup", "aria-label": "人物" }),
+        stage = rsLookStage(),
         draw = () => {
           Xt(grid);
+          stage.show(sel ? rs1Kit(sel) : null, sel ? `${sel} ${rs1Name(sel)}` : "");
           for (let code of RS1_CODES) {
             let id = rs1Kit(code),
               p = Ai.find((x) => x.id === id),
@@ -5377,7 +5407,7 @@
           "div",
           {},
           T("h2", {}, "你是哪一位？"),
-          grid,
+          T("div", { class: "rs-pick2" }, stage.el, grid),
           T(
             "div",
             { class: "row" },
@@ -5387,6 +5417,7 @@
         ),
         m = Qn(body, { wide: !0, label: "選人物" });
       function fin(v) {
+        stage.close();
         (v && or("lastStudent", v), m.close(), done(v));
       }
     });
@@ -5459,8 +5490,10 @@
         note = T("p", { class: "rs-name-note", id: "guest-name-note", "aria-live": "polite" }, "不填的話，用造型的名稱。"),
         err = T("p", { class: "err", role: "alert" }),
         defName = (c) => (Ai[RS1_CODES.indexOf(c)] || Ai[0]).name,
+        stage = rsLookStage(),
         draw = () => {
           Xt(grid);
+          stage.show(sel ? rs1Kit(sel) : null, sel ? defName(sel) : "");
           for (let code of RS1_CODES) {
             let id = rs1Kit(code),
               p = Ai.find((x) => x.id === id),
@@ -5489,7 +5522,7 @@
           "div",
           { class: "rs-gpick" },
           T("h2", {}, "訪客：選一個造型，取一個名字"),
-          grid,
+          T("div", { class: "rs-pick2" }, stage.el, grid),
           T("div", { class: "rs-name-row" }, T("label", { class: "rs-name-label", for: "guest-name" }, "你的名字"), input),
           note,
           err,
@@ -5509,6 +5542,7 @@
         ((RS_ENTRY.look = sel), (RS_ENTRY.name = rsCleanName(input.value)), fin(sel));
       }
       function fin(v) {
+        stage.close();
         (m.close(), done(v));
       }
     });
@@ -5912,7 +5946,7 @@
 
   window.__RS1 = {  };
 
-  window.__RS1 = { rs1QNo, RS1_OP, RS1_VENUE, RS1_SECTIONS, RS1_UNITS, RS1_PRESET, Gt, vc, rs1ErrType, rs1AnswerRow, rs1Csv, RS1_ANSWER_COLS, rs1Password, rs1TeacherPw, rs1LoadHistory, rs1Practices, rs1ResultCard, rs1WaitTeacher, rs1LockGet };
+  window.__RS1 = { rsLookBoard: (w, s) => rsLookBoard(w, s), rs1QNo, RS1_OP, RS1_VENUE, RS1_SECTIONS, RS1_UNITS, RS1_PRESET, Gt, vc, rs1ErrType, rs1AnswerRow, rs1Csv, RS1_ANSWER_COLS, rs1Password, rs1TeacherPw, rs1LoadHistory, rs1Practices, rs1ResultCard, rs1WaitTeacher, rs1LockGet };
 
   // ---------- 新任務通知：題目一出來就跳出「新任務＋地點」 ----------
   function rs1Notice(app, cur) {
@@ -5940,6 +5974,20 @@
 .chip-personPlay{background:#fdf0c4;color:#6b5200}.chip-personQueue{background:#dbe9fb;color:#1d4f8a}
 body.rs-nohl .chip{background:none!important;border-color:transparent!important;color:inherit!important;padding:0!important;font-weight:inherit}
 body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{display:none!important}
+.rs-pick2{display:flex;gap:14px;align-items:stretch;margin-top:8px}.rs-pick2 .avatars{flex:1;margin-top:0;grid-template-columns:repeat(3,minmax(0,1fr))!important;align-content:start}
+.rs-stage{flex:0 0 32%;max-width:300px;min-width:170px;position:relative;border-radius:20px;background:radial-gradient(120% 90% at 50% 100%,#dff0d0 0%,#f4faee 55%,#ffffff 100%);border:3px solid #cfe3bd;display:flex;flex-direction:column;overflow:hidden}
+.rs-stage-cv{width:100%;flex:1;min-height:230px;display:block;cursor:grab}.rs-stage-name{text-align:center;font-weight:800;font-size:20px;color:#2f5419;padding:2px 6px 0}.rs-stage-hint{text-align:center;font-size:13px;color:#6b7a5e;padding:0 6px 8px}
+.rs-stage-empty .rs-stage-cv{visibility:hidden}.rs-stage-empty .rs-stage-name:after{content:"先選一個人物"}
+.rs-pick2 .avatar-card img{aspect-ratio:1;object-fit:cover;object-position:50% 8%;border-radius:12px;background:#eef6e6}.rs-pick2 .avatar-card{transition:transform .12s,box-shadow .12s}.rs-pick2 .avatar-card:active{transform:scale(.96)}
+.rs-pick2 .avatar-card[aria-checked='true']{box-shadow:0 0 0 3px #7fb24a55;transform:translateY(-2px)}
+@media (max-width:560px),(max-height:500px){.rs-stage{display:none}}
+.btn,.choice,.avatar-card,.unit-btn,.numpad button,.pad button{transition:transform .08s ease,box-shadow .12s ease,background-color .12s ease,border-color .12s ease}
+.btn:active,.choice:active,.numpad button:active,.pad button:active,.hud button:active,.nav button:active{transform:scale(.96)}
+.choice[aria-checked='true']{box-shadow:0 0 0 3px #7fb24a40}
+.rs-flystar{position:fixed;z-index:9999;font-size:46px;line-height:1;pointer-events:none;color:#f7bd2c;text-shadow:0 2px 0 #b9770e,0 0 16px #ffe08a;will-change:transform,opacity}
+.rs-pulse{animation:rsPulse .55s ease}
+@keyframes rsPulse{0%{transform:scale(1)}35%{transform:scale(1.08,1.9)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.rs-flystar{display:none}.rs-pulse{animation:none}.btn:active,.choice:active,.numpad button:active,.pad button:active,.hud button:active,.nav button:active{transform:none}}
 .rs-students .avatar-card{position:relative}.rs-code{position:absolute;top:6px;left:8px;background:#2f5419;color:#fff;border-radius:999px;min-width:28px;height:28px;display:grid;place-items:center;font-weight:800}
 .rs-sections{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:10px}@media (max-width:620px){.rs-sections{grid-template-columns:1fr!important}}.rs-sections .unit-btn{width:100%}.rs-sections .unit-btn.rs-closed{opacity:.5;cursor:not-allowed}.rs-sections .no{font-size:.95em}.rs-sections .rs-done{color:#9a6a00;font-weight:700}.rs-starline{font-weight:700;color:#9a6a00;margin:0 0 8px;font-size:18px}.rs-sections .unit-btn.rs-isdone{border-color:#f5b82e;background:#fffaf0}
 .rs-op{border:2px dashed #b9cfa6;border-radius:14px;padding:10px 12px;margin:10px 0;background:#fbfdf8}
@@ -6208,10 +6256,68 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         ((a.talk -= dt), rig.kit && rig.kit.talk(t, dt));
         continue;
       }
+      if (rig.kit && rig.kit._em) continue; // 正在做表情動作（揮手、點頭…）時，不要蓋掉頭的角度
       rig.head.rotation.y = 0.35 * Math.sin(p) * Math.max(0, Math.sin(p * 0.37 + 1));
       rig.head.rotation.x = a.main ? 0.32 * Math.max(0, Math.sin(p * 0.5)) ** 3 : 0.04 * Math.sin(p * 0.8);
       rig.body.rotation.z = 0.018 * Math.sin(p * 0.6);
       rig.body.position.x = 0.012 * Math.sin(p * 0.6);
+    }
+    // v2.11.0：作答完回到操場後，補做一次表情動作（答對：學生歡呼、老師舉手鼓勵；答錯：學生抓頭）
+    if (w._pendEm && w.mode === "explore" && !w.camTween) {
+      w._pendT = (w._pendT || 0) + dt;
+      if (w._pendT > 0.3) {
+        let pe = w._pendEm;
+        ((w._pendEm = null), w.emote("player", pe.p), pe.t && w.emote("teacher", pe.t));
+      }
+    }
+    // v2.11.0：老師帶著做的那一題，老師伸手指向題目的道具（做完就放下）
+    let app = window.__pgm,
+      guided = !!(app && app.session && app.session.cur && app.session.cur.guided && w.mode === "answer"),
+      tn = w.activeStation && w.npcFor ? w.npcFor(w.activeStation) : null,
+      tk = tn && tn.ch.userData.rig && tn.ch.userData.rig.kit;
+    if (tk && tk.emote && !w.reduced) {
+      if (guided && !tk._em) tk.emote("point");
+      else if (!guided && tk._em && tk._em.name === "point") tk.emote(null);
+    }
+    // v2.11.0：這一站出題的老師在學生走近時轉身面向學生、揮手一次；學生離開就轉回原本的方向
+    let wrap = (x) => ((x + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+    if (tn && tn.ch.visible && w.player) {
+      let main = tn;
+      (main._yawAt !== main.at || main._base === undefined) && ((main._yawAt = main.at), (main._base = main.ch.rotation.y), (main._yaw = main._base), (main._near = !1));
+      let dx = w.pos.x - main.ch.position.x,
+        dz = w.pos.z - main.ch.position.z,
+        d = Math.hypot(dx, dz),
+        ex = w.mode === "explore",
+        want = ex && d < 9 ? main._base + Math.max(-1.3, Math.min(1.3, wrap(Math.atan2(dx, dz) - main._base))) : main._base;
+      ((main._yaw += wrap(want - main._yaw) * Math.min(1, dt * 3)), (main.ch.rotation.y = main._yaw));
+      let mk = main.ch.userData.rig && main.ch.userData.rig.kit;
+      if (ex && d < 7.5 && !main._near) ((main._near = !0), mk && mk.emote && !w.reduced && !mk._em && mk.emote("wave"));
+      else d > 11 && (main._near = !1);
+    }
+    // v2.14.0：走近這一站的老師時，鏡頭稍微拉近一點（離開就恢復）；不改學生自己調的鏡頭距離
+    {
+      let near = !1;
+      if (tn && tn.ch.visible && w.player && w.mode === "explore" && !w.reduced) near = Math.hypot(w.pos.x - tn.ch.position.x, w.pos.z - tn.ch.position.z) < 6.5;
+      w.rsZoom = (w.rsZoom || 1) + ((near ? 0.84 : 1) - (w.rsZoom || 1)) * Math.min(1, dt * 2.2);
+    }
+    // v2.11.0：學生走近老師時，頭會轉過去看老師（9 公尺內、老師在前方或側面）
+    let pk = w.player && w.player.userData.rig && w.player.userData.rig.kit;
+    if (pk) {
+      let look = 0;
+      if (w.mode === "explore") {
+        let bd = 9;
+        for (let a of list) {
+          if (!a.ch.visible) continue;
+          let dx = a.ch.position.x - w.pos.x,
+            dz = a.ch.position.z - w.pos.z,
+            d = Math.hypot(dx, dz);
+          if (d < bd && d > 0.3) {
+            let rel = wrap(Math.atan2(dx, dz) - w.player.rotation.y);
+            Math.abs(rel) < 1.5 && ((bd = d), (look = rel * 0.85));
+          }
+        }
+      }
+      pk.lookYaw = look;
     }
     // 靠近時轉向玩家並說一句話
     if (w.mode !== "explore" || !w.player) return;
@@ -6464,11 +6570,22 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     }
     b.anim = b.anim.filter((a) => a.t < 1.2);
   }
-  function rsLookBoard(w) {
+  function rsLookBoard(w, section) {
+    // v2.14.0：推近時對準這個小節所在的那一格（第五、六、七單元各一格）
+    let px = RS_BOARD.x;
+    try {
+      let k = Math.max(0, Math.min(2, parseInt(String(section || "6"), 10) - 5)),
+        P = w.rsBoard && w.rsBoard.panels[k],
+        v = new E(),
+        sx = 0;
+      P && P.stars.length && (P.stars.forEach((m) => (sx += m.getWorldPosition(v).x)), (px = sx / P.stars.length));
+    } catch {}
     let B = RS_BOARD,
       look = new E(B.x, 2, B.z),
       pos = new E(B.x - 1.5, 3.4, B.z + 10);
-    return ((w.mode = "summary"), w.tweenCamera(pos, look, !1));
+    // v2.14.0：先帶到加分板前，再慢慢推近（星星貼上去的那兩秒）
+    ((w.mode = "summary"), (w._camQ = null), w.tweenCamera(pos, look, !1, 1.0));
+    rsCamLater(w, 1.0, () => w.mode === "summary" && w.tweenCamera(new E(px - 0.4, 2.6, B.z + 5.6), new E(px, 1.85, B.z), !1, 2.2));
   }
 
   // ===================== v1.4.0：第三人稱鏡頭與操控的輔助函式 =====================
@@ -8553,6 +8670,9 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     soft() {
       ls(330, 0, 0.18, 0.06, "sine");
     },
+    star() {
+      ls(1318.5, 0, 0.16, 0.08, "triangle");
+    },
     step() {
       let s = Bc();
       if (!s || Ma || !Sa) return;
@@ -8711,14 +8831,24 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
           (r.font = `700 ${Math.max(10, Math.round(a / 13))}px 'Noto Sans TC', 'PingFang TC', sans-serif`),
           (r.textAlign = "center"),
           (r.textBaseline = "middle"));
-        for (let [y, x] of Object.entries($e)) {
-          if (y === "track") continue;
-          let M = m(x.npc.x, x.npc.z);
+        // v3.0.0：地點名稱不互相重疊。目前任務的地點先畫，再由近到遠；和已畫的字重疊時改畫在點的下方，還是重疊就不畫
+        let fs = Math.max(10, Math.round(a / 13)),
+          placed = [],
+          items = Object.entries($e)
+            .filter(([y]) => y !== "track")
+            .map(([y, x]) => ({ y, x, M: m(x.npc.x, x.npc.z) }))
+            .sort((p, q) => (p.y === o.active ? -1 : q.y === o.active ? 1 : Math.hypot(p.M.x - a / 2, p.M.y - a / 2) - Math.hypot(q.M.x - a / 2, q.M.y - a / 2)));
+        for (let it of items) {
+          let tw = r.measureText(it.x.label).width + 4,
+            hit = (cx, cy) => placed.some((b) => Math.abs(b.x - cx) < (b.w + tw) / 2 && Math.abs(b.y - cy) < fs + 1),
+            cy = [it.M.y - 9, it.M.y + fs + 1].find((yy) => !hit(it.M.x, yy));
+          if (cy === undefined) continue;
+          placed.push({ x: it.M.x, y: cy, w: tw });
           ((r.lineWidth = 3),
             (r.strokeStyle = "rgba(255,255,255,0.9)"),
-            r.strokeText(x.label, M.x, M.y - 9),
+            r.strokeText(it.x.label, it.M.x, cy),
             (r.fillStyle = "#2b2a26"),
-            r.fillText(x.label, M.x, M.y - 9));
+            r.fillText(it.x.label, it.M.x, cy));
         }
         if ((r.restore(), o.active)) {
           let y = $e[o.active],
@@ -9486,7 +9616,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       onSubmit(e) {
         let t = this.session.submit(e);
         return (
-          t.correct && t.questionDone ? (Ri.correct(), this.world.celebrate()) : t.correct ? Ri.accept() : t.correct === !1 && Ri.soft(),
+          t.correct && t.questionDone ? (Ri.correct(), this.world.celebrate(), rsFlyStar(this.world)) : t.correct ? Ri.accept() : t.correct === !1 && (Ri.soft(), this.world.emote && (this.world.emote("player", "scratch"), this.world.emoteLater("scratch", null))),
           t
         );
       }
@@ -9534,7 +9664,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
           requestAnimationFrame(() => this.world.resize()));
         if (e.section) {
           let st = rs1MarkDone(e.code, e.section);
-          ((this.rsStar = st), rsBoardRefresh(this.world, e.code, e.section), rsLookBoard(this.world), Ri.complete(), (this.mode = "summary"));
+          ((this.rsStar = st), rsBoardRefresh(this.world, e.code, e.section), rsLookBoard(this.world, e.section), Ri.complete(), (this.mode = "summary"));
           setTimeout(() => this.showSummary(null), this.world.reduced ? 300 : 2600);
           return;
         }
@@ -31004,7 +31134,7 @@ void main() {
       matGreen: 5214042,
       accentOrange: 15901498,
       accentTeal: 2792847,
-      outline: 2830407,
+      outline: 0x3a3449, // v2.12.0：外框線從近黑的深藍改成較柔的深紫灰
       basketball: 14710831,
       seam: 3809812,
     },
@@ -31254,9 +31384,18 @@ void main() {
   var pi = null;
   function uf() {
     if (pi) return pi;
+    // v3.0：明暗三階保留，但階與階之間改成柔和過渡（原本是硬邊，圓滑的表面會出現一圈一圈的色塊）
     let s = jt.toonLevels,
-      e = new Uint8Array(s.map((t) => Math.round(t * 255)));
-    return ((pi = new Po(e, s.length, 1, zp)), (pi.minFilter = pi.magFilter = wt), (pi.generateMipmaps = !1), (pi.needsUpdate = !0), pi);
+      N = 64,
+      sm = (a, b, x) => { let t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); },
+      e = new Uint8Array(N);
+    for (let i = 0; i < N; i++) {
+      let x = (i + 0.5) / N,
+        v = s[0] + (s[1] - s[0]) * sm(0.27, 0.42, x);
+      v += (s[2] - s[1]) * sm(0.58, 0.76, x);
+      e[i] = Math.round(v * 255);
+    }
+    return ((pi = new Po(e, N, 1, zp)), (pi.minFilter = pi.magFilter = 1006), (pi.generateMipmaps = !1), (pi.needsUpdate = !0), pi);
   }
   var Oh = new Map();
   function Te(s, e = {}) {
@@ -31272,7 +31411,7 @@ void main() {
     let n = new yn({
       uniforms: {
         color: { value: new Se(s) },
-        thickness: { value: 0.0024 * e },
+        thickness: { value: 0.0017 * e }, // v2.12.0：外框線改細（原本 0.0024）
         fogColor: { value: new Se(16777215) },
         fogNear: { value: 1e5 },
         fogFar: { value: 2e5 },
@@ -31298,6 +31437,7 @@ void main() {
       void main() {
         float f = smoothstep(fogNear, fogFar, vDepth);
         gl_FragColor = vec4(mix(color, fogColor, f), 1.0);
+        #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
       side: Ot,
@@ -31357,7 +31497,7 @@ void main() {
       }
       (a.material && a.material.isMeshBasicMaterial && a.material.transparent) ||
         ((a.castShadow = !0),
-        (a.receiveShadow = !0),
+        (a.receiveShadow = !a.userData.noRecv),
         !(a.isInstancedMesh || a.userData.noOutline || (a.material && a.material.transparent && a.material.opacity < 0.7)) &&
           e &&
           Zs(a, { width: t, important: n, color: i }));
@@ -31588,19 +31728,7 @@ vObjN = normalize(position);`,
       let l = Qs(0.06 * e, 0.1 * e, 1.2 * e, i, 6);
       (l.position.set((c ? 0.4 : -0.35) * e, 2.4 * e, (c ? -0.1 : 0.2) * e), (l.rotation.z = c ? -0.7 : 0.75), n.add(l));
     }
-    let a = [6068798, 7319111, 5212727, 8239954],
-      o = 4 + Math.floor(t() * 3);
-    for (let c = 0; c < o; c++) {
-      let l = (1 + t() * 0.8) * e,
-        h = new ne(new Ki(l, 1), Te(a[c % a.length])),
-        d = t() * Math.PI * 2,
-        u = c === 0 ? 0 : (0.9 + t() * 0.5) * e;
-      (h.position.set(Math.cos(d) * u, (3.2 + t() * 1.2) * e + (c === 0 ? 0.6 * e : 0), Math.sin(d) * u * 0.8),
-        (h.scale.y = 0.85 + t() * 0.2),
-        (h.castShadow = !0),
-        (h.receiveShadow = !0),
-        n.add(Fe(h, 1)));
-    }
+    n.add(rsCrown(t, e)); // v2.13.0：樹冠改成一個有起伏、有深淺的網格，會隨風輕輕擺動
     return (n.add(Dn(3.6 * e, 3.6 * e, 0.7)), n);
   }
   function yf({ w: s = 60, h: e = 11, d: t = 9 } = {}) {
@@ -32550,14 +32678,7 @@ normal = normalize( vNormal );`,
     ((tr.position.y = h / 2), G.add(Fe(tr, 0.8)));
     let cs = Qs(0.26, 0.24, 1.3, Te(6136900), 10);
     ((cs.position.y = h + 0.6), G.add(cs));
-    let leafM = Te(RS.palmLeaf);
-    for (let i = 0; i < 9; i++) {
-      let a = (i / 9) * Math.PI * 2 + r() * 0.3,
-        f = new ne(new qi(0.42, 3.4, 4), leafM),
-        P = new Re();
-      ((f.scale.set(1, 1, 0.25), (f.position.y = 1.7), P.add(f), P.position.set(0, h + 1.2, 0)), (P.rotation.order = "YXZ"));
-      ((P.rotation.y = a), (P.rotation.x = 1.2 + r() * 0.5), G.add(P));
-    }
+    G.add(rsPalmCrown(r, h + 1.15)); // v2.13.0：羽狀葉（原本是 9 根尖錐）
     return (G.add(Dn(3, 3, 0.5)), G);
   }
   // ---------- 涼亭（面向東：東側整面三階木階梯；北南長椅；歇山式屋頂；總高 5 公尺） ----------
@@ -33514,6 +33635,15 @@ normal = normalize( vNormal );`,
         pm = Te(c),
         b = new ne(new Ze(h.w, h.h, h.d), [fm, fm, Te(10264204), pm, fm, fm]);
       (b.position.set(h.x, h.h / 2, h.z), (b.castShadow = b.receiveShadow = !0), G.add(Fe(b, 1)));
+      // v2.13.0：屋頂女兒牆、樓梯間、水塔，牆腳深色腰帶；遠看天際線才不會是一排光禿禿的方塊
+      let sd = i % 2 ? 1 : -1;
+      G.add(_e(h.w + 0.5, 0.5, h.d + 0.5, Te(9737364), h.x, h.h + 0.25, h.z));
+      G.add(_e(h.w + 0.12, 1.1, h.d + 0.12, Te(8024940), h.x, 0.55, h.z));
+      G.add(_e(3.4, 2.5, 3.2, pm, h.x + sd * h.w * 0.26, h.h + 1.25, h.z));
+      G.add(_e(3.8, 0.2, 3.6, Te(9737364), h.x + sd * h.w * 0.26, h.h + 2.6, h.z));
+      let tk = Qs(0.85, 0.85, 1.5, Te(13224393), 12);
+      (tk.position.set(h.x - sd * h.w * 0.22, h.h + 1.45, h.z + (i % 3 ? 1.2 : -1.2)), G.add(tk));
+      for (let q of [-1, 1]) G.add(_e(0.1, 0.7, 0.1, Te(7368816), h.x - sd * h.w * 0.22 + q * 0.6, h.h + 0.35, h.z + (i % 3 ? 1.2 : -1.2)));
     });
     return G;
   }
@@ -33626,6 +33756,14 @@ normal = normalize( vNormal );`,
       let p = rsPalm(10.5 + ((i * 37) % 5) * 0.5, 200 + i);
       (p.position.set(x, 0, z), S.add(p));
     });
+    // v2.13.0：草坪上的小花、大型設施底下的接地陰影
+    let rsFl = rsFlowers(gt.lawns, gt.palms);
+    rsFl && S.add(rsFl);
+    for (let k of ["combo", "spinnet", "swings", "recycle"]) {
+      let o = gt[k];
+      o && S.add(rsGroundShade(o.x, o.z, o.w * 1.25, o.d * 1.7, 0.6));
+    }
+    gt.gazebo && S.add(rsGroundShade(gt.gazebo.x, gt.gazebo.z, (gt.gazebo.w || 6) * 1.5, (gt.gazebo.d || 6) * 1.5, 0.6));
     e.add(S);
   }
   // 小地圖的實景底圖
@@ -34390,7 +34528,8 @@ function CharKit(T) {
     return matCache.get(key);
   }
   const vcMat = () => mat(0xffffff, { vertexColors: true });
-  const outlineMat = new T.MeshBasicMaterial({ color: 0x2b2a33, side: T.BackSide });
+  const outlineMat = new T.MeshBasicMaterial({ color: 0x3d2f2b, side: T.BackSide });
+  const OLW = 0.72; // v3.0：外框線寬度倍數（改細）
 
   // ---------- 幾何工具 ----------
   function geom(pos, idx, col, uv) {
@@ -34404,6 +34543,7 @@ function CharKit(T) {
   }
   // 輪廓線：沿法線外推的背面網格（inverted hull）
   function outline(mesh, w = 0.004) {
+    w *= OLW;
     const g = mesh.geometry,
       p = g.attributes.position,
       n = g.attributes.normal,
@@ -34423,7 +34563,30 @@ function CharKit(T) {
   }
   /* 橢圓環疊成的管狀表面。rings: [{y, rx, rz, cx, cz}]（由下往上或沿局部 y），
      color(i, a) 可回傳頂點顏色 [r,g,b]；capBottom/capTop 以扇形封口 */
+  function smoothRings(rings, n) {
+    const out = [],
+      K = ["y", "rx", "rz", "cx", "cz"],
+      cr = (p0, p1, p2, p3, t) => 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t * t * t);
+    for (let i = 0; i < rings.length - 1; i++) {
+      const a = rings[Math.max(0, i - 1)],
+        b = rings[i],
+        c2 = rings[i + 1],
+        d = rings[Math.min(rings.length - 1, i + 2)];
+      for (let k = 0; k < n; k++) {
+        const t = k / n,
+          r = {};
+        for (const key of K) r[key] = cr(a[key] || 0, b[key] || 0, c2[key] || 0, d[key] || 0, t);
+        // y 必須單調：用線性，避免曲線回折
+        r.y = b.y + (c2.y - b.y) * t;
+        out.push(r);
+      }
+    }
+    out.push(Object.assign({}, rings[rings.length - 1]));
+    if (rings[0].capH) out[0].capH = rings[0].capH;
+    return out;
+  }
   function ringTube(rings, seg = 20, opt = {}) {
+    if (opt.smooth && rings.length >= 3) rings = smoothRings(rings, opt.smooth);
     const pos = [],
       idx = [],
       col = opt.color ? [] : null,
@@ -34485,6 +34648,7 @@ function CharKit(T) {
   }
   const texMat = (f, W, Hh) => new T.MeshLambertMaterial({ map: paintTex(f, W, Hh) });
   const hex = (h) => [((h >> 16) & 255) / 255, ((h >> 8) & 255) / 255, (h & 255) / 255];
+  const shadeHex = (h, k) => (Math.round(((h >> 16) & 255) * k) << 16) | (Math.round(((h >> 8) & 255) * k) << 8) | Math.round((h & 255) * k);
   // 變形球：f(dir) 回傳新的點
   function warpSphere(f, ws = 32, hs = 24) {
     const g = new T.SphereGeometry(1, ws, hs),
@@ -34644,6 +34808,8 @@ function CharKit(T) {
   };
   const at = (o, x, y, z) => (o.position.set(x, y, z), o);
 
+  // ---------- v3.0 造型風格：身高不變，頭略放大、五官放大有神（學生／成人各一組） ----------
+  const AV_STYLE = { headKid: 1.16, headAdult: 1.07, eyeW: 1.42, eyeHAdd: 0.0135, brow: 1.25, mouth: 1.2 };
   // ---------- 校服配色（沿用遊戲中的北屯國小運動服） ----------
   const UNI = { shirt: 0xf5f0c8, green: 0x23894a, stripe: 0xf7f7f7, sock: 0x1e1e1e };
 
@@ -34744,37 +34910,49 @@ function CharKit(T) {
       nose = mesh(ellip(0.0065, 0.01, 0.008), skin);
     face(nose, ns, 0.002);
     G.add(nose);
-    // 眼睛：杏仁形眼裂＋上眼瞼線＋眉毛
-    const eyeMat = mat(0x2a211c),
-      lidMat = mat(0x3a2a22),
+    // 眼睛（v3.0）：眼白＋虹膜＋瞳孔＋兩點反光＋較粗的上眼線＋眉毛；仍保留每個人原本的眼形差異
+    const kid = !c.outfit,
+      EW = hp.eyeW * (kid ? AV_STYLE.eyeW : 1.25),
+      EH = hp.eyeH + (kid ? AV_STYLE.eyeHAdd : 0.008),
+      irisC = c.iris || 0x4a3020,
+      lidMat = mat(0x2b211d),
       browMat = mat(c.hair);
     for (const s of [-1, 1]) {
-      const es = surf(fn, s * (hp.eyeX / (hp.w / 2)) * 0.95, 0.06 + hp.eyeY),
-        eye = mesh(slab(almond(hp.eyeW, hp.eyeH), 0.002), eyeMat);
-      face(eye, es, 0.0015);
-      eye.rotation.z += s * 0.05;
-      G.add(eye);
-      const hi = mesh(ellip(0.0022, 0.0022, 0.0012), mat(0xffffff));
-      face(hi, es, 0.0032);
-      hi.position.x += s * 0.004;
-      hi.position.y += hp.eyeH * 0.12;
-      G.add(hi);
-      // 眨眼用：動畫時壓扁眼睛
-      eye.userData.keep = hi.userData.keep = true;
-      (G.userData.eyes = G.userData.eyes || []).push(eye, hi);
-      const lid = mesh(arcTube(hp.eyeW * 1.12, -hp.eyeH * 0.55, 0.0016), lidMat);
-      face(lid, es, 0.002);
-      lid.position.y += hp.eyeH * 0.32;
+      const es = surf(fn, s * (hp.eyeX / (hp.w / 2)) * 0.95, 0.05 + hp.eyeY),
+        EG = new T.Group(); // 一隻眼睛一個節點：裡面的零件會被合併成一個網格，眨眼時壓扁整個節點
+      face(EG, es, 0);
+      EG.userData.keepNode = true;
+      G.add(EG);
+      const put = (m, off, dx = 0, dy = 0) => {
+        m.position.set(dx, dy, off);
+        EG.add(m);
+        return m;
+      };
+      const white = put(mesh(slab(almond(EW, EH), 0.0015), mat(0xfbf8f3)), 0.0006);
+      white.rotation.z += s * 0.05;
+      const iy = EH * 0.07;
+      put(mesh(ellip(EH * 0.43, EH * 0.47, 0.0012), mat(irisC)), 0.0022, -s * EW * 0.03, iy);
+      put(mesh(ellip(EH * 0.22, EH * 0.25, 0.0008), mat(0x17110e)), 0.0031, -s * EW * 0.03, iy);
+      put(mesh(ellip(EH * 0.13, EH * 0.13, 0.0006), mat(0xffffff)), 0.004, -s * EW * 0.03 + EH * 0.17, iy + EH * 0.2);
+      put(mesh(ellip(EH * 0.06, EH * 0.06, 0.0005), mat(0xffffff)), 0.004, -s * EW * 0.03 - EH * 0.16, iy - EH * 0.16);
+      (G.userData.eyes = G.userData.eyes || []).push(EG);
+      // 上眼線：比眼白略寬，外眼角稍微上揚
+      const lid = mesh(arcTube(EW * 1.1, -EH * 0.62, kid ? 0.0021 : 0.0017), lidMat);
+      face(lid, es, 0.0036);
+      lid.position.y += EH * 0.02;
+      lid.rotation.z += s * 0.05;
+      lid.userData.keep = true;
       G.add(lid);
-      const bs = surf(fn, s * (hp.eyeX / (hp.w / 2)) * 0.95, 0.06 + hp.eyeY + 0.2),
-        brow = mesh(arcTube(hp.eyeW * (c.browW || 1.15), -0.004, c.browT || 0.0028), browMat);
+      (G.userData.lids = G.userData.lids || []).push(lid);
+      const bs = surf(fn, s * (hp.eyeX / (hp.w / 2)) * 0.95, 0.05 + hp.eyeY + 0.2 + EH * 2.2),
+        brow = mesh(arcTube(EW * (c.browW || 1.0), -0.004, (c.browT || 0.0028) * AV_STYLE.brow), browMat);
       face(brow, bs, 0.002);
       brow.rotation.z += s * -0.08;
       G.add(brow);
     }
     // 嘴巴：淺淺的微笑弧線
     const ms = surf(fn, 0, -0.48),
-      mouth = mesh(arcTube(0.026, 0.004, 0.0018), mat(0xa4504a));
+      mouth = mesh(arcTube(0.026 * AV_STYLE.mouth, 0.0052, 0.0021), mat(0xb0504a));
     face(mouth, ms, c.beard ? 0.0032 : 0.0015);
     G.add(mouth);
     // 說話用：張開的嘴（平常壓扁看不到）
@@ -34830,7 +35008,7 @@ function CharKit(T) {
     if (c.blush !== false)
     for (const s of [-1, 1]) {
       const cs = surf(fn, s * 0.62, -0.32),
-        b = mesh(ellip(0.016, 0.01, 0.002), mat(0xf0a08a, { transparent: true, opacity: 0.35, depthWrite: false }));
+        b = mesh(ellip(0.019, 0.012, 0.002), mat(0xf29a88, { transparent: true, opacity: 0.42, depthWrite: false }));
       face(b, cs, 0.001);
       G.add(b);
     }
@@ -34932,7 +35110,10 @@ function CharKit(T) {
         const k = info(az, pol).b / (o.bumpH || 0.007),
           sc = o.scalp ? o.scalp(az, pol) : 0, // 0..1：露出頭皮的程度（平頭）
           skin = hex(c.skin).map((v) => Math.pow(v, 2.2));
-        return base.map((v, i) => lerp(Math.min(1, v * (0.85 + hl * k) + 0.004 * k), skin[i] * 0.55 + v * 0.45, sc));
+        // v3.0：頭頂下方一圈柔和的髮光（前面與側面較亮、髮束之間略有斷續），頭髮才不會是一整塊黑
+        const ring = Math.exp(-Math.pow((pol - Math.PI * 0.27) / 0.16, 2)) * (0.55 + 0.45 * Math.cos(az)) * (0.72 + 0.28 * Math.sin(az * 17 + pol * 9)),
+          gl = (o.gloss === undefined ? 1 : o.gloss) * ring;
+        return base.map((v, i) => lerp(Math.min(1, v * (0.85 + hl * k) + 0.004 * k + gl * (0.05 + v * 1.6) * [1.0, 0.93, 0.86][i]), skin[i] * 0.55 + v * 0.45, sc));
       }),
     );
   }
@@ -35297,7 +35478,8 @@ function CharKit(T) {
     const O = c.outfit || null,
       SW = c.shoulderW || 1;
     // 主要高度（以身高比例）
-    const headH = (c.head && c.head.h) || 0.225,
+    const headS = c.headScale || (c.outfit ? AV_STYLE.headAdult : AV_STYLE.headKid),
+      headH = ((c.head && c.head.h) || 0.225) * headS,
       chinY = H - headH,
       shY = H * 0.825,
       crotchY = H * 0.47,
@@ -35334,14 +35516,18 @@ function CharKit(T) {
     const sy0 = hemY - 0.01,
       sy1 = shY + 0.03;
     const shirt = mesh(
-      ringTube(shirtRings, 64, { uv: true }),
+      ringTube(shirtRings, 64, { uv: true, smooth: O ? 0 : 2 }),
       O && !O.raglan ? mat(O.shirt) : texMat((a, v) => {
         // 插肩袖：從領口斜到腋下，線以上是綠色
         const y = sy0 + v * (sy1 - sy0),
           side = Math.abs(Math.sin(a)),
           lim = lerp(1.05, 0.42, smooth(shY - 0.085, shY + 0.02, y));
         if (O) return O.trim && O.raglan && lim < 1 && Math.abs(Math.asin(Math.min(1, side)) - Math.asin(lim)) < 0.035 && y > shY - 0.1 ? O.trim : y < hemY + 0.012 && O.trim && O.hemTrim ? O.trim : O.shirt;
-        return side > lim ? UNI.green : UNI.shirt;
+        const base = side > lim ? UNI.green : UNI.shirt,
+          crease = Math.pow(Math.max(0, Math.sin(a * 3 + v * 11 + Math.sin(a * 2) * 1.3)), 8) * smooth(0.06, 0.16, v) * (1 - smooth(0.36, 0.5, v)),
+          under = side * side * smooth(0.5, 0.66, v) * (1 - smooth(0.7, 0.8, v)),
+          hem = 1 - smooth(0.0, 0.035, v);
+        return shadeHex(base, 1 - 0.07 * crease - 0.09 * under - 0.1 * hem);
       }, O ? 1024 : 512, O ? 512 : 256),
       0.004,
     );
@@ -35371,16 +35557,17 @@ function CharKit(T) {
     const shorts = mesh(
       ringTube(
         [
+          ...(O ? [] : [{ y: crotchY - 0.085, rx: chest.rx * 0.42, rz: chest.rz * 0.98, cz: -0.004 }, { y: crotchY - 0.06, rx: chest.rx * 0.5, rz: chest.rz * 1.02, cz: -0.004 }, { y: crotchY - 0.03, rx: chest.rx * 0.8, rz: chest.rz * 1.035, cz: -0.004 }]),
           { y: crotchY - 0.01, rx: chest.rx * 1.0, rz: chest.rz * 1.04, cz: -0.004 },
           { y: H * 0.5 - 0.015, rx: chest.rx * 1.04, rz: chest.rz * 1.07, cz: -0.004 },
           { y: H * 0.5 + 0.012, rx: chest.rx * 1.055, rz: chest.rz * 1.085, cz: -0.004 },
           { y: waistY, rx: chest.rx * 0.94, rz: chest.rz * 0.96, cz: -0.004 },
         ],
         48,
-        { capBottom: true, uv: true },
+        { capBottom: true, uv: true, smooth: O ? 0 : 2 },
       ),
       O ? mat(O.pants) : texMat((a) => (Math.abs(Math.cos(a)) < 0.05 ? UNI.stripe : UNI.green), 256, 16),
-      0.004,
+      O ? 0.004 : 0,
     );
     body.add(shorts);
     // --- 腿（大腿、膝、小腿、腳）；腿根在 (±hipX, crotchY+0.02) ---
@@ -35398,7 +35585,7 @@ function CharKit(T) {
       body.add(L);
       const kY = kneeY - (crotchY + 0.02);
       // 大腿（被褲管蓋住的上段也做，避免抬腿時露空）
-      L.add(mesh(ringTube([{ y: kY, rx: kneeR, rz: kneeR }, { y: kY * 0.5, rx: thighR * 0.92, rz: thighR * 0.95 }, { y: 0.02, rx: thighR, rz: thighR }], 16), skin, 0.003));
+      L.add(mesh(ringTube([{ y: kY, rx: kneeR, rz: kneeR * 1.02 }, { y: kY * 0.9, rx: kneeR, rz: kneeR * 1.03 }, { y: kY * 0.5, rx: thighR * 0.9, rz: thighR * 0.95 }, { y: 0.02, rx: thighR, rz: thighR }], 18, { smooth: 2 }), skin, 0.003));
       // 褲管：寬鬆，蓋到大腿中段
       const legHole = H * (O && O.shortLen ? O.shortLen : 0.39) - (crotchY + 0.02);
       if (O && O.long) {
@@ -35410,12 +35597,12 @@ function CharKit(T) {
         mesh(
           ringTube(
             [
-              { y: legHole, rx: thighR * 1.32, rz: thighR * 1.28 },
-              { y: legHole * 0.4, rx: thighR * 1.3, rz: thighR * 1.28 },
+              { y: legHole, rx: thighR * 1.38, rz: thighR * 1.33 },
+              { y: legHole * 0.4, rx: thighR * 1.31, rz: thighR * 1.29 },
               { y: 0.04, rx: thighR * 1.25, rz: thighR * 1.22 },
             ],
             28,
-            { uv: true },
+            { uv: true, smooth: 2 },
           ),
           O ? mat(O.pants) : texMat((a) => (Math.abs(Math.sin(a) - s) < 0.012 ? UNI.stripe : UNI.green), 256, 16),
           0.004,
@@ -35425,8 +35612,10 @@ function CharKit(T) {
       const K = new T.Group();
       K.position.y = kY;
       L.add(K);
+      // v3.0：膝蓋球，彎腿時大腿和小腿之間不會出現缺口
+      if (!(O && O.long)) K.add(mesh(ellip(kneeR * 0.965, kneeR * 1.0, kneeR * 0.985), skin));
       const aY = ankleY - kneeY;
-      K.add(mesh(ringTube([{ y: aY, rx: ankR, rz: ankR }, { y: aY * 0.55, rx: calfR, rz: calfR * 1.05, cz: -0.004 }, { y: 0, rx: kneeR, rz: kneeR }], 16, { capTop: true }), skin, 0.003));
+      K.add(mesh(ringTube([{ y: aY, rx: ankR, rz: ankR }, { y: aY * 0.75, rx: calfR * 0.74, rz: calfR * 0.8, cz: -0.002 }, { y: aY * 0.36, rx: calfR * 1.04, rz: calfR * 1.12, cz: -0.006 }, { y: aY * 0.12, rx: kneeR, rz: kneeR * 1.02 }, { y: 0, rx: kneeR, rz: kneeR * 1.02 }], 18, { capTop: true, smooth: 2 }), skin, 0.003));
       if (O && O.long) {
         // 長褲小腿段：從膝蓋到腳踝，褲口略收
         K.add(mesh(ringTube([{ y: aY + 0.008, rx: ankR * 1.8, rz: ankR * 1.9 }, { y: aY + 0.03, rx: ankR * 1.85, rz: ankR * 1.95 }, { y: aY * 0.55, rx: calfR * 1.35, rz: calfR * 1.38, cz: -0.004 }, { y: 0.02, rx: kneeR * 1.5, rz: kneeR * 1.5 }], 32, { uv: true }), O.pantsStripe ? texMat((a) => (Math.abs(Math.sin(a) - s) < 0.004 ? O.pantsStripe : O.pants), 512, 8) : mat(O.pants), 0.004));
@@ -35438,12 +35627,13 @@ function CharKit(T) {
         mesh(
           ringTube(
             [
-              { y: aY - 0.005, rx: ankR * 1.12, rz: ankR * 1.12 },
-              ...(O ? [] : [{ y: aY * 0.55, rx: calfR * 1.08, rz: calfR * 1.1, cz: -0.004 }]),
-              { y: sockTop, rx: (O ? calfR * 1.06 : kneeR * 1.1), rz: (O ? calfR * 1.08 : kneeR * 1.1) },
+              { y: aY - 0.005, rx: ankR * 1.14, rz: ankR * 1.14 },
+              ...(O ? [] : [{ y: aY * 0.75, rx: calfR * 0.74 * 1.13, rz: calfR * 0.8 * 1.13, cz: -0.002 }, { y: aY * 0.36, rx: calfR * 1.04 * 1.1, rz: calfR * 1.12 * 1.1, cz: -0.006 }]),
+              { y: sockTop, rx: (O ? calfR * 1.06 : kneeR * 1.12), rz: (O ? calfR * 1.08 : kneeR * 1.14), cz: O ? 0 : -0.002 },
             ],
-            16,
+            18,
             {
+              smooth: O ? 0 : 2,
               color: (i, a) => hex(UNI.sock),
             },
           ),
@@ -35530,20 +35720,21 @@ function CharKit(T) {
       A.position.set(s * armX, shY - 0.035, -0.005);
       A.rotation.z = s * 0.07;
       body.add(A);
-      A.add(mesh(ringTube([{ y: -uaL, rx: elR, rz: elR }, { y: -uaL * 0.5, rx: uaR, rz: uaR * 1.05 }, { y: 0.0, rx: uaR * 1.08, rz: uaR * 1.1 }, { y: 0.02, rx: uaR * 0.8, rz: uaR * 0.8, capH: 0.006 }], 16, { capTop: true }), skin, 0.003));
+      A.add(mesh(ringTube([{ y: -uaL, rx: elR, rz: elR * 1.04 }, { y: -uaL * 0.86, rx: elR * 1.03, rz: elR * 1.1 }, { y: -uaL * 0.45, rx: uaR * 0.98, rz: uaR * 1.06 }, { y: 0.0, rx: uaR * 1.08, rz: uaR * 1.1 }, { y: 0.02, rx: uaR * 0.8, rz: uaR * 0.8, capH: 0.006 }], 16, { capTop: true, smooth: 2 }), skin, 0.003));
       // 袖子：綠色、寬鬆短袖＋外側白線
       A.add(
         mesh(
           ringTube(
             [
-              { y: -uaL * 0.55, rx: uaR * 1.55, rz: uaR * 1.5 },
-              { y: -uaL * 0.25, rx: uaR * 1.5, rz: uaR * 1.48 },
-              { y: 0.02, rx: uaR * 1.45, rz: uaR * 1.42 },
-              { y: 0.04, rx: uaR * 1.2, rz: uaR * 1.18 },
-              { y: 0.052, rx: uaR * 0.7, rz: uaR * 0.7, capH: 0.004 },
+              { y: -uaL * 0.55, rx: uaR * (O ? 1.46 : 1.6), rz: uaR * (O ? 1.44 : 1.56) },
+              { y: -uaL * 0.3, rx: uaR * (O ? 1.42 : 1.46), rz: uaR * (O ? 1.42 : 1.46) },
+              { y: -0.01, rx: uaR * 1.36, rz: uaR * 1.38 },
+              { y: 0.016, rx: uaR * 1.14, rz: uaR * 1.2 },
+              { y: 0.032, rx: uaR * 0.74, rz: uaR * 0.82 },
+              { y: 0.04, rx: uaR * 0.3, rz: uaR * 0.34, capH: 0.003 },
             ],
             28,
-            { capTop: true, uv: true },
+            { capTop: true, uv: true, smooth: 2 },
           ),
           O ? (O.sleeveStripe ? texMat((a) => (Math.abs(Math.sin(a) - s) < 0.006 ? O.trim : O.shirt), 512, 8) : mat(O.shirt)) : texMat((a) => (Math.abs(Math.sin(a) - s) < 0.012 ? UNI.stripe : UNI.green), 256, 16),
           0.004,
@@ -35559,12 +35750,17 @@ function CharKit(T) {
       const E = new T.Group();
       E.position.y = -uaL;
       A.add(E);
-      E.add(mesh(ringTube([{ y: -faL, rx: wrR, rz: wrR * 0.85 }, { y: -faL * 0.45, rx: elR * 1.05, rz: elR }, { y: 0.01, rx: elR, rz: elR }, { y: 0.02, rx: elR * 0.6, rz: elR * 0.6, capH: 0.004 }], 14, { capTop: true }), skin, 0.003));
+      E.add(mesh(ellip(elR * 0.965, elR * 1.0, elR * 0.99), skin)); // v3.0：手肘球
+      E.add(mesh(ringTube([{ y: -faL, rx: wrR * 0.86, rz: wrR * 1.0 }, { y: -faL * 0.8, rx: wrR * 0.92, rz: wrR * 1.04 }, { y: -faL * 0.3, rx: elR * 1.06, rz: elR * 1.08 }, { y: 0.01, rx: elR, rz: elR * 1.04 }, { y: 0.02, rx: elR * 0.6, rz: elR * 0.6, capH: 0.004 }], 14, { capTop: true, smooth: 2 }), skin, 0.003));
       // 手：手掌（扁）＋拇指
       const Hd = new T.Group();
       Hd.position.y = -faL;
       E.add(Hd);
-      const palm = mesh(warpSphere((d) => V(d.x * H * 0.016, d.y * H * 0.034 - H * 0.03, d.z * H * 0.022 * (d.y < 0 ? 1.0 : 0.9)), 14, 10), skin, 0.003);
+      const palm = mesh(warpSphere((d) => {
+        const t = clamp((0.35 - d.y) / 1.35, 0, 1), // 0＝手腕 1＝指尖
+          wid = H * 0.0215 * (0.72 + 0.42 * Math.sin(Math.min(1, t * 1.25 + 0.12) * Math.PI) ) ;
+        return V(d.x * H * 0.0125 * (1 - 0.25 * t) - s * H * 0.012 * t * t, d.y * H * 0.036 - H * 0.031, d.z * wid + H * 0.004 * t * t);
+      }, 16, 14), skin, 0.003);
       Hd.add(palm);
       const th = mesh(ellip(H * 0.008, H * 0.02, H * 0.008), skin, 0.002);
       th.position.set(-s * H * 0.006, -H * 0.025, H * 0.016);
@@ -35577,6 +35773,7 @@ function CharKit(T) {
     // --- 頭 ---
     const head = buildHead(c, H);
     head.position.y = chinY + headH / 2;
+    head.scale.setScalar(headS);
     body.add(head);
     const hairG = new T.Group();
     head.add(hairG);
@@ -35590,11 +35787,13 @@ function CharKit(T) {
       if (P.fore) fores[k].rotation.set(P.fore[0], P.fore[1] || 0, P.fore[2] || 0);
       if (P.hand) hands[k].rotation.set(P.hand[0], P.hand[1] || 0, P.hand[2] || 0);
     }
+    for (const k of [0, 1]) if (!(c.pose && c.pose[k]) && !c.outfit) (fores[k].rotation.x = -0.2), (hands[k].rotation.x = -0.08);
     for (const k of c.pocket || []) hands[k].visible = false;
     root.updateMatrixWorld(true);
     // --- 配件 ---
     for (const a of c.acc || []) ACC[a] && ACC[a](rig, c);
     rig.held = [0, 1].map((k) => !!(c.pose && c.pose[k]));
+    if (c.emoteArm !== undefined) rig.emoteArm = c.emoteArm;
     attachAnim(rig);
     root.userData.rig = rig;
     return root;
@@ -35753,7 +35952,8 @@ function CharKit(T) {
       // dt：秒；moving：有沒有在移動；n：舊的步頻倍數（沒有實際距離時用）；ex＝{ dist 這一格實際水平移動距離, speed 實際速度, turn 轉向角速度 }
       walk(dt, moving, n = 1, ex) {
         this._blink(dt);
-        const G = GAIT;
+        const G = GAIT,
+          EM = this._emTick(dt);
         let v = ex && ex.speed !== undefined ? ex.speed : moving ? (n * 9 * 1.3) / Math.PI : 0;
         if (!moving) v = Math.min(v, this.v);
         this.v = v;
@@ -35885,18 +36085,67 @@ function CharKit(T) {
           if (lock) fx += w * G.lockSwing * cf;
           else if (held[k]) fx += w * G.heldElbow * cf;
           else (fx -= w * (mix(G.elbow, g) + mix(G.elbowDyn, g) * (1 - cf) * 0.5)), (az += w * g * 0.05 * (k ? 1 : -1));
-          Ar.rotation.x += (ax - Ar.rotation.x) * a;
-          Ar.rotation.z += (az - Ar.rotation.z) * a;
-          rig.fores[k].rotation.x += (fx - rig.fores[k].rotation.x) * a;
+          // v2.11.0：表情動作（歡呼、抓頭、揮手…）蓋過走路的手臂目標；用比較慢的速度靠過去才自然
+          const ea = EM && EM.arm ? EM.arm(k, k ? 1 : -1) : null,
+            a2 = ea ? Math.min(1, dt * 11) : this._emOut > 0 ? Math.min(1, dt * 7) : a;
+          if (ea) (ax = ea[0]), (az = ea[1]), (fx = ea[2]);
+          Ar.rotation.x += (ax - Ar.rotation.x) * a2;
+          Ar.rotation.z += (az - Ar.rotation.z) * a2;
+          rig.fores[k].rotation.x += (fx - rig.fores[k].rotation.x) * a2;
           if (!held[k] && !lock) rig.hands[k].rotation.x += (rest.hands[k].x + w * G.wrist * Math.cos(TAU * (ph - G.foreLag - 0.06)) - rig.hands[k].rotation.x) * a;
           // 肩膀和骨盆反向轉（用肩關節前後位移做）
           Ar.position.z = rest.armPos[k].z + (k ? 1 : -1) * Math.abs(rest.armPos[k].x) * Math.sin(cyaw);
         });
         // 頭保持穩定：抵銷身體前傾、側傾
-        const ha = Math.min(1, dt * 12);
-        rig.head.rotation.x += (-lean * 0.6 - rig.head.rotation.x) * ha;
-        rig.head.rotation.z += (-roll * 0.8 - rig.head.rotation.z) * ha;
-        this._mouth(0, Math.min(1, dt * 12));
+        const ha = Math.min(1, dt * 12),
+          eh = EM && EM.head ? EM.head() : null;
+        rig.head.rotation.x += ((eh ? eh[0] : -lean * 0.6) - rig.head.rotation.x) * ha;
+        rig.head.rotation.z += ((eh ? eh[1] : -roll * 0.8) - rig.head.rotation.z) * ha;
+        // 看向某個方向（例如走近老師時看老師）：只有設定了 lookYaw 的人物才會動
+        if (this.lookYaw !== undefined) rig.head.rotation.y += (clamp(this.lookYaw, -1.0, 1.0) - rig.head.rotation.y) * Math.min(1, dt * 5);
+        if (EM && EM.hop) rig.body.position.y += EM.hop();
+        this._mouth(EM && EM.mouth ? EM.mouth : 0, Math.min(1, dt * 12));
+      },
+      /* v2.11.0：表情動作。name：cheer 歡呼、scratch 抓頭、nod 點頭、praise 舉手鼓勵、wave 揮手、point 指向（持續到 emote(null)）
+         拿著東西的手不動（免得東西亂飛）；兩手都拿東西的角色只做身體和頭的動作 */
+      emote(name) {
+        if (!name) return ((this._em = null), (this._emOut = 0.4));
+        const free = rig.emoteArm !== undefined ? rig.emoteArm : held[1] ? (held[0] ? -1 : 0) : 1, // 優先用左手，左手拿東西就用右手；老師在設定裡指定（emoteArm）
+          E = { name, t: 0, dur: { cheer: 1.25, scratch: 1.4, nod: 0.9, praise: 1.4, wave: 1.7, point: 1e9 }[name] || 1 };
+        const u = () => E.t / E.dur,
+          env = () => Math.min(1, E.t * 6, (E.dur - E.t) * 5);
+        if (name === "cheer") {
+          E.arm = (k, s) => (held[k] && k !== free ? null : [-2.9 + 0.1 * Math.sin(E.t * 15 + k), s * (0.34 + 0.06 * Math.sin(E.t * 15)), -0.3]);
+          E.head = () => [-0.2, 0];
+          E.hop = () => 0.065 * Math.abs(Math.sin(Math.PI * 2 * Math.min(1, u() * 1.15))) * (u() < 0.87 ? 1 : 0);
+          E.mouth = 0.55;
+        } else if (name === "scratch") {
+          E.arm = (k, s) => (k === free ? [-2.5, s * 0.5, -2.3 + 0.13 * Math.sin(E.t * 17)] : null);
+          E.head = () => [0.13, (free ? -1 : 1) * 0.13];
+        } else if (name === "nod") {
+          E.head = () => [0.3 * Math.max(0, Math.sin(u() * Math.PI * 4)), 0];
+        } else if (name === "praise") {
+          E.arm = (k, s) => (k === free ? [-1.5, s * 0.2, -1.55 + 0.1 * Math.sin(E.t * 12)] : null);
+          E.head = () => [0.24 * Math.max(0, Math.sin(u() * Math.PI * 4)), 0];
+          E.mouth = 0.35;
+        } else if (name === "wave") {
+          E.arm = (k, s) => (k === free ? [-0.15, s * (2.5 + 0.3 * Math.sin(E.t * 10)), -0.35] : null);
+          E.head = () => [0, 0];
+          E.mouth = 0.3;
+        } else if (name === "point") {
+          E.arm = (k, s) => (k === free ? [-1.1, s * 0.12, -0.18] : null);
+          E.head = () => [0.16, 0];
+        }
+        this._em = E;
+        this._emOut = 0;
+      },
+      _emTick(dt) {
+        if (this._emOut > 0) this._emOut -= dt;
+        const E = this._em;
+        if (!E) return null;
+        E.t += dt;
+        if (E.t >= E.dur) return ((this._em = null), (this._emOut = 0.4), null);
+        return E;
       },
       // 坐、溜滑梯等姿勢：把走路加上去的位移與傾斜慢慢收回
       neutral(a) {
@@ -35924,6 +36173,7 @@ function CharKit(T) {
         if (mc) mc.visible = !mo.visible;
       },
       talk(t, dt = 1 / 60) {
+        if (this._em) return this.walk(dt, false); // 表情動作優先（例如學生答對時老師舉手鼓勵）
         this._blink(dt);
         const a = Math.min(1, dt * 10),
           syl = Math.abs(Math.sin(t * 11)) * (Math.sin(t * 2.3) > -0.4 ? 1 : 0);
@@ -36755,6 +37005,7 @@ var TEACHER_DEFS = {
     clip: { board: 0x26272b, rx: 0.05, ry: -0.45, rz: -0.12, up: -0.1, tx: 0.1, ty: 0.105, fingers: [[0.03, 0.105], [0.0, 0.1], [-0.03, 0.095]] },
     whistle: { color: 0xc9ced3, cord: 0x161616 },
     acc: ["whistle", "clipboard", "watch"],
+    emoteArm: 1,
   },
   pe_female_01: {
     name: "女體育老師1",
@@ -36777,6 +37028,7 @@ var TEACHER_DEFS = {
     pose: RS_HIPS(-0.15, 0.8, -1.0, -1.8),
     whistle: { color: 0xd23a2e, cord: 0xc8322a },
     acc: ["cap", "whistle", "watch"],
+    emoteArm: 1,
   },
   pe_male_02: {
     name: "男體育老師2",
@@ -36802,6 +37054,7 @@ var TEACHER_DEFS = {
     pose: RS_HIPS(-0.05, 0.85, -0.4, -1.7),
     whistle: { color: 0xc9ced3, cord: 0x161616 },
     acc: ["whistle", "watch"],
+    emoteArm: 1,
   },
   pe_female_02: {
     name: "女體育老師2",
@@ -36822,6 +37075,7 @@ var TEACHER_DEFS = {
     pose: RS_HIPS(-0.15, 0.8, -1.0, -1.8),
     whistle: { color: 0xc9ced3, cord: 0x161616 },
     acc: ["whistle", "watch"],
+    emoteArm: 1,
   },
 };
 var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"];
@@ -36843,7 +37097,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       def = TEACHER_DEFS[id] ? TEACHER_DEFS[id] : Object.assign({}, CHAR_DEFS[id] || CHAR_DEFS.boyA, { emblem: rsImg(RS_EMBLEM) }),
       c = kit.build(def);
     kit.optimize(c);
-    c.traverse((o) => o.isMesh && (o.userData.noOutline = !0));
+    c.traverse((o) => o.isMesh && ((o.userData.noOutline = !0), (o.userData.noRecv = !0))); // v3.0：人物不接收陰影貼圖（解析度不夠，臉和衣服會出現一塊一塊的假陰影）
     let k = new ne(new sn(0.3, 20), new nt({ color: 0, transparent: !0, opacity: 0.18, depthWrite: !1 }));
     ((k.rotation.x = -Math.PI / 2), (k.position.y = 0.02), (k.userData.noOutline = !0), c.add(k));
     return ((c.userData.kitId = id), c);
@@ -36942,7 +37196,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     let P = [
       ["equipment", "器材室", I.x + 2.4, 5.4, I.z],
       ["court", "籃球場", u.x - 9.2, 3.2, u.z],
-      ["stage", "司令臺", A.x, 9.2, A.z],
+      ["stage", "司令臺", A.x, 11.0, A.z], // v3.0.0：名稱牌往上移，不擋頂棚的校徽（原本 9.2）
       ["grass", "草地集合場", $e.grass.zone.x, 2.4, $e.grass.zone.z - 3.6],
       ["volley", "排球場", $e.volley.zone.x, 2.6, $e.volley.zone.z + 3.4],
       ["recycle", "垃圾回收場", gt.recycle.x, 4.2, gt.recycle.z],
@@ -36984,6 +37238,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
         (this.quality = "standard"));
     }
     focus(e, t, n = 30) {
+      this.quality === "high" && (n *= 1.5); // v2.12.0：高畫質時陰影涵蓋範圍加大，遠一點的樹和設施也有影子
       let i = this.sun;
       (i.target.position.set(e, 0, t), i.position.set(e + this.sunDir.x * 60, this.sunDir.y * 60, t + this.sunDir.z * 60));
       let r = i.shadow.camera;
@@ -37139,6 +37394,415 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     let g = new it();
     (g.setAttribute("position", new ve(pos, 3)), g.setAttribute("normal", new ve(nor, 3)), g.setAttribute("uv", new ve(uv, 2)), g.setIndex(idx));
     return new ne(g, mat);
+  }
+  // ===================== v2.12.0：畫面精緻化第 3 輪——光影、色調、天空、後製 =====================
+  // 色調：ACES 電影色調映射；暖色陽光＋偏藍的天空光（陰影自然偏冷）；天空有漸層與會飄的雲；
+  // 後製（標準／高畫質）：柔光、暗角、輕微調色。省電畫質沒有後製、雲不動，但色調映射相同，顏色不會差太多。
+  var RS_LOOK = {
+    tone: 4, // ACESFilmicToneMapping
+    exposure: 1.0,
+    hemiSky: 0xcfe2ff,
+    hemiGround: 0xc9b596,
+    hemiIntensity: 1.0,
+    sun: 0xfff0d2,
+    sunIntensity: 1.6,
+    rim: 0xffe3bd,
+    rimIntensity: 0.45,
+    fog: 0xd9e6f2,
+    fogNear: 90,
+    fogFar: 360,
+    skyTop: 0x2f7fd6,
+    skyMid: 0x6fb0ec,
+    skyHor: 0xcfe4f4,
+    bloom: 0.24,
+    bloomThreshold: 1.0,
+    vignette: 0.22,
+    saturation: 1.06,
+    contrast: 1.04,
+  };
+  function rsSkyDome(sunDir) {
+    let m = new yn({
+      uniforms: {
+        uTime: { value: 0 },
+        uTop: { value: new Se(RS_LOOK.skyTop) },
+        uMid: { value: new Se(RS_LOOK.skyMid) },
+        uHor: { value: new Se(RS_LOOK.skyHor) },
+        uSunDir: { value: sunDir.clone().normalize() },
+        uClouds: { value: 1 },
+      },
+      vertexShader: `
+      varying vec3 vDir;
+      void main() {
+        vDir = position;
+        vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        gl_Position = p.xyww;
+      }`,
+      fragmentShader: `
+      uniform float uTime; uniform vec3 uTop; uniform vec3 uMid; uniform vec3 uHor; uniform vec3 uSunDir; uniform float uClouds;
+      varying vec3 vDir;
+      float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+      float noise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }
+      float fbm(vec2 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a * noise(p); p = p * 2.03 + 11.7; a *= 0.5; } return s; }
+      void main() {
+        vec3 d = normalize(vDir);
+        float h = max(d.y, 0.0);
+        vec3 col = mix(uHor, uMid, smoothstep(0.0, 0.22, h));
+        col = mix(col, uTop, smoothstep(0.18, 0.8, h));
+        float sd = max(dot(d, uSunDir), 0.0);
+        col += vec3(1.0, 0.9, 0.7) * (pow(sd, 6.0) * 0.12 + pow(sd, 60.0) * 0.25);
+        if (uClouds > 0.5 && d.y > 0.01) {
+          vec2 uv = d.xz / (d.y + 0.16) * 1.9 + vec2(uTime * 0.006, uTime * 0.002);
+          float n = fbm(uv);
+          float c = smoothstep(0.58, 0.7, n) * smoothstep(0.03, 0.16, d.y);
+          float lit = fbm(uv + uSunDir.xz * 0.12);
+          vec3 cc = mix(vec3(0.74, 0.8, 0.9), vec3(1.0, 0.99, 0.96), smoothstep(0.35, 0.75, 1.0 - (lit - n) * 3.0 - n * 0.35));
+          col = mix(col, cc, c * 0.9);
+        }
+        gl_FragColor = vec4(col, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+      side: Ot,
+      depthWrite: !1,
+      fog: !1,
+    });
+    let s = new ne(new dt(1, 24, 16), m);
+    ((s.frustumCulled = !1), (s.renderOrder = -1e3), (s.userData.noOutline = !0), (s.raycast = () => {}), (s.name = "rsSky"));
+    s.scale.setScalar(400);
+    return s;
+  }
+  // 後製：場景先畫到一張圖上，再做柔光（亮部微微暈開）、色調映射、調色、暗角，最後才顯示
+  function rsPostMake(R) {
+    let gl = R.getContext(),
+      isGL2 = typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext;
+    if (!isGL2) return null;
+    let hf = R.extensions.has("EXT_color_buffer_float") || R.extensions.has("EXT_color_buffer_half_float"),
+      type = hf ? 1016 : 1009,
+      size = new ce(),
+      mk = (w, h, o) => new Wn(Math.max(2, w), Math.max(2, h), Object.assign({ type, depthBuffer: !1, minFilter: 1006, magFilter: 1006 }, o || {})),
+      A = mk(4, 4, { samples: 4, depthBuffer: !0 }),
+      B = mk(2, 2),
+      C = mk(2, 2),
+      cam = new So(-1, 1, 1, -1, 0, 1),
+      quad = new ne(new Qe(2, 2), null),
+      sc = new Br(),
+      vs = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+      pass = (fs, u) => new yn({ uniforms: u, vertexShader: vs, fragmentShader: fs, depthTest: !1, depthWrite: !1, toneMapped: !1 }),
+      bright = pass(
+        `uniform sampler2D tex; uniform vec2 px; uniform float th; varying vec2 vUv;
+         void main(){ vec3 c = (texture2D(tex, vUv + px * vec2(-1.0,-1.0)).rgb + texture2D(tex, vUv + px * vec2(1.0,-1.0)).rgb + texture2D(tex, vUv + px * vec2(-1.0,1.0)).rgb + texture2D(tex, vUv + px * vec2(1.0,1.0)).rgb) * 0.25;
+           c = min(c, vec3(4.0)); float l = max(c.r, max(c.g, c.b)); gl_FragColor = vec4(c * smoothstep(th, th + 0.5, l), 1.0); }`,
+        { tex: { value: null }, px: { value: new ce() }, th: { value: RS_LOOK.bloomThreshold } },
+      ),
+      blur = pass(
+        `uniform sampler2D tex; uniform vec2 dir; varying vec2 vUv;
+         void main(){ vec3 c = texture2D(tex, vUv).rgb * 0.227;
+           c += (texture2D(tex, vUv + dir * 1.385).rgb + texture2D(tex, vUv - dir * 1.385).rgb) * 0.316;
+           c += (texture2D(tex, vUv + dir * 3.231).rgb + texture2D(tex, vUv - dir * 3.231).rgb) * 0.070;
+           gl_FragColor = vec4(c, 1.0); }`,
+        { tex: { value: null }, dir: { value: new ce() } },
+      ),
+      comp = pass(
+        `uniform sampler2D tex; uniform sampler2D glow; uniform float bloom; uniform float expo; uniform float vig; uniform float sat; uniform float con; varying vec2 vUv;
+         vec3 fit(vec3 v){ vec3 a = v * (v + 0.0245786) - 0.000090537; vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081; return a / b; }
+         vec3 aces(vec3 c){
+           const mat3 mi = mat3(vec3(0.59719, 0.07600, 0.02840), vec3(0.35458, 0.90834, 0.13383), vec3(0.04823, 0.01566, 0.83777));
+           const mat3 mo = mat3(vec3(1.60475, -0.10208, -0.00327), vec3(-0.53108, 1.10813, -0.07276), vec3(-0.07367, -0.00605, 1.07602));
+           c *= expo / 0.6; c = mi * c; c = fit(c); c = mo * c; return clamp(c, 0.0, 1.0); }
+         vec3 toSRGB(vec3 c){ return mix(pow(c, vec3(0.41666)) * 1.055 - vec3(0.055), c * 12.92, vec3(lessThanEqual(c, vec3(0.0031308)))); }
+         void main(){
+           vec3 c = texture2D(tex, vUv).rgb + texture2D(glow, vUv).rgb * bloom;
+           c = aces(c);
+           float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+           c = mix(vec3(l), c, sat);
+           c = (c - 0.5) * con + 0.5;
+           c *= mix(vec3(0.96, 0.98, 1.04), vec3(1.03, 1.0, 0.97), smoothstep(0.15, 0.75, l)); // 暗部微冷、亮部微暖
+           vec2 q = vUv - 0.5; c *= 1.0 - vig * smoothstep(0.25, 0.85, dot(q, q) * 2.0);
+           gl_FragColor = vec4(toSRGB(clamp(c, 0.0, 1.0)), 1.0); }`,
+        { tex: { value: null }, glow: { value: null }, bloom: { value: RS_LOOK.bloom }, expo: { value: RS_LOOK.exposure }, vig: { value: RS_LOOK.vignette }, sat: { value: RS_LOOK.saturation }, con: { value: RS_LOOK.contrast } },
+      );
+    sc.add(quad);
+    quad.frustumCulled = !1;
+    let run = (m, target) => ((quad.material = m), R.setRenderTarget(target), R.render(sc, cam));
+    return {
+      ok: !0,
+      render(scene, camera) {
+        R.getDrawingBufferSize(size);
+        let w = size.x,
+          h = size.y,
+          bw = Math.max(2, Math.round(w / 4)),
+          bh = Math.max(2, Math.round(h / 4));
+        (A.width !== w || A.height !== h) && (A.setSize(w, h), B.setSize(bw, bh), C.setSize(bw, bh));
+        (R.setRenderTarget(A), R.render(scene, camera));
+        ((bright.uniforms.tex.value = A.texture), bright.uniforms.px.value.set(1 / w, 1 / h), run(bright, B));
+        ((blur.uniforms.tex.value = B.texture), blur.uniforms.dir.value.set(1 / bw, 0), run(blur, C));
+        ((blur.uniforms.tex.value = C.texture), blur.uniforms.dir.value.set(0, 1 / bh), run(blur, B));
+        ((blur.uniforms.tex.value = B.texture), blur.uniforms.dir.value.set(2 / bw, 0), run(blur, C));
+        ((blur.uniforms.tex.value = C.texture), blur.uniforms.dir.value.set(0, 2 / bh), run(blur, B));
+        ((comp.uniforms.tex.value = A.texture), (comp.uniforms.glow.value = B.texture), (comp.uniforms.expo.value = R.toneMappingExposure), run(comp, null));
+      },
+      dispose() {
+        (A.dispose(), B.dispose(), C.dispose());
+      },
+    };
+  }
+  // 套用光影設定（建立世界時呼叫一次）
+  function rsLookInit(w) {
+    let R = w.renderer,
+      rig = w.rig,
+      L = RS_LOOK;
+    ((R.toneMapping = L.tone), (R.toneMappingExposure = L.exposure));
+    (rig.hemi.color.set(L.hemiSky), rig.hemi.groundColor.set(L.hemiGround), (rig.hemi.intensity = L.hemiIntensity));
+    (rig.sun.color.set(L.sun), (rig.sun.intensity = L.sunIntensity), rig.rim.color.set(L.rim), (rig.rim.intensity = L.rimIntensity));
+    rig.sun.shadow.radius = 2.2;
+    (w.scene.fog && (w.scene.fog.color.set(L.fog), (w.scene.fog.near = L.fogNear), (w.scene.fog.far = L.fogFar)), df(L.fog, L.fogNear, L.fogFar));
+    w.scene.background = new Se(L.skyHor);
+    ((w.rsSky = rsSkyDome(rig.sunDir)), w.scene.add(w.rsSky));
+    w.rsPost = null;
+    w.rsPostWant = !1;
+  }
+  function rsLookQuality(w) {
+    let q = w.quality;
+    w.rsPostWant = q !== "low";
+    w.rsSky && (w.rsSky.material.uniforms.uClouds.value = 1);
+    w.rsSkyAnim = q !== "low" && !w.reduced;
+  }
+  // 每一格：天空跟著鏡頭、雲慢慢飄；畫面用後製畫（做不起來就直接畫）
+  function rsLookDraw(w, t) {
+    let R = w.renderer;
+    w.reduced || t === undefined || (RS_WIND.value = t);
+    if (w.rsSky) (w.rsSky.position.copy(w.camera.position), w.rsSkyAnim && t !== undefined && (w.rsSky.material.uniforms.uTime.value = t));
+    if (w.rsPostWant && w.rsPost !== !1) {
+      try {
+        w.rsPost || (w.rsPost = rsPostMake(R) || !1);
+        if (w.rsPost) return w.rsPost.render(w.scene, w.camera);
+      } catch (e) {
+        (console.warn("後製無法使用，改成直接畫", e), (w.rsPost = !1), R.setRenderTarget(null));
+      }
+    }
+    (R.getRenderTarget() && R.setRenderTarget(null), R.render(w.scene, w.camera));
+  }
+
+  // ===================== v2.14.0：畫面精緻化第 5 輪——鏡頭與過場 =====================
+  // 排程：幾秒後執行一個鏡頭動作；換模式時會清掉
+  function rsCamLater(w, delay, fn) {
+    (w._camQ = w._camQ || []).push({ t: delay, fn });
+  }
+  function rsCamTick(w, dt) {
+    let q = w._camQ;
+    if (!q || !q.length) return;
+    for (let a of q) a.t -= dt;
+    let due = q.filter((a) => a.t <= 0);
+    w._camQ = q.filter((a) => a.t > 0);
+    for (let a of due) a.fn();
+  }
+  // 整題答對：鏡頭先停在道具上看完星星特效，再轉到人物正面看他歡呼約 1.6 秒，然後回到道具（解說還要對照道具）
+  function rsHeroShot(w) {
+    if (w.reduced || w.mode !== "answer" || !w.player || !w.player.visible) return !1;
+    rsCamLater(w, 0.5, () => {
+      if (w.mode !== "answer" || !w.player) return;
+      ((w._pendEm = null), w.emote("player", "cheer"), w.emote("teacher", "praise"));
+      let p = w.player.position,
+        rig = w.player.userData.rig,
+        H = Math.min(2, Math.max(1.1, (rig && rig.headY) || 1.4)),
+        look = new E(p.x, p.y + H * 0.66, p.z),
+        best = null;
+      // 左前方或右前方，挑沒有被建物擋住的那一邊
+      for (let s of [0.55, -0.55, 1.2, -1.2]) {
+        let a = w.player.rotation.y + s,
+          pos = new E(p.x + Math.sin(a) * 3.4, p.y + H * 0.92, p.z + Math.cos(a) * 3.4),
+          t = rsCamOcc(w, look, pos, 0.25);
+        if (!best || t > best.t) best = { t, pos };
+        if (t >= 1) break;
+      }
+      best.t < 1 && best.pos.sub(look).multiplyScalar(Math.max(0.45, best.t * 0.9)).add(look);
+      w.tweenCamera(best.pos, look, !1, 0.6);
+      rsCamLater(w, 1.75, () => w.mode === "answer" && w.fitAnswerCamera(!1));
+    });
+    return !0;
+  }
+
+  // ===================== v3.0.0：畫面精緻化第 6 輪——回饋與介面 =====================
+  // 整題答對：一顆星星從操場畫面中間飛到右邊的進度條，進度條跳一下。裝置設定「減少動態效果」時不做
+  function rsFlyStar(w) {
+    try {
+      if ((w && w.reduced) || !document.body) return;
+      let bar = document.querySelector(".panel .bar[role=progressbar]") || document.querySelector(".bar[role=progressbar]");
+      if (!bar) return;
+      let br = bar.getBoundingClientRect(),
+        cv = w && w.canvas ? w.canvas.getBoundingClientRect() : { left: 0, top: 0, width: innerWidth, height: innerHeight },
+        x0 = cv.left + Math.min(cv.width, Math.max(120, br.left - cv.left)) * 0.5,
+        y0 = cv.top + cv.height * 0.42,
+        x1 = br.left + br.width * 0.5,
+        y1 = br.top + br.height * 0.5,
+        el = document.createElement("div");
+      ((el.className = "rs-flystar"), (el.textContent = "★"), el.setAttribute("aria-hidden", "true"));
+      ((el.style.left = x0 - 22 + "px"), (el.style.top = y0 - 26 + "px"), (el.style.transform = "scale(0.3)"), (el.style.opacity = "0"));
+      document.body.appendChild(el);
+      setTimeout(() => ((el.style.transition = "transform .28s cubic-bezier(.3,1.5,.5,1), opacity .2s"), (el.style.transform = "scale(1.25)"), (el.style.opacity = "1")), 380);
+      setTimeout(() => ((el.style.transition = "transform .62s cubic-bezier(.5,0,.3,1), opacity .62s"), (el.style.transform = `translate(${x1 - x0}px, ${y1 - y0}px) scale(0.45)`), (el.style.opacity = "0.9")), 760);
+      setTimeout(() => {
+        el.remove();
+        let b = document.querySelector(".panel .bar[role=progressbar]") || document.querySelector(".bar[role=progressbar]");
+        b && (b.classList.remove("rs-pulse"), void b.offsetWidth, b.classList.add("rs-pulse"));
+        typeof Ri !== "undefined" && Ri.star && Ri.star();
+      }, 1400);
+    } catch {}
+  }
+  // ===================== v2.13.0：畫面精緻化第 4 輪——樹、王棕、花、風吹、接地陰影 =====================
+  var RS_WIND = { value: 0 };
+  var rsLeafMatCache = null;
+  // 葉子的材質：頂點顏色、卡通明暗、兩面都畫；頂點依「sway」屬性隨風擺動（越靠外擺越多）
+  function rsLeafMat() {
+    if (rsLeafMatCache) return rsLeafMatCache;
+    let m = new qr({ vertexColors: !0, gradientMap: uf(), side: _t });
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.uWind = RS_WIND;
+      sh.vertexShader =
+        "uniform float uWind;\nattribute float sway;\n" +
+        sh.vertexShader.replace(
+          "#include <begin_vertex>",
+          `#include <begin_vertex>
+          vec4 rsWp = modelMatrix * vec4(position, 1.0);
+          float rsPh = uWind * 1.25 + rsWp.x * 0.31 + rsWp.z * 0.23;
+          transformed.x += (sin(rsPh) * 0.07 + sin(rsPh * 2.3 + 1.0) * 0.025) * sway;
+          transformed.z += cos(rsPh * 0.8 + 0.6) * 0.055 * sway;
+          transformed.y += sin(rsPh * 1.7) * 0.02 * sway;`,
+        );
+    };
+    return (rsLeafMatCache = m);
+  }
+  function rsLeafMesh(pos, nor, col, sway, idx) {
+    let g = new it();
+    (g.setAttribute("position", new ve(pos, 3)), g.setAttribute("color", new ve(col, 3)), g.setAttribute("sway", new ve(sway, 1)));
+    idx && g.setIndex(idx);
+    nor ? g.setAttribute("normal", new ve(nor, 3)) : g.computeVertexNormals();
+    let m = new ne(g, rsLeafMat());
+    ((m.castShadow = !0), (m.receiveShadow = !1), (m.userData.noOutline = !0), (m.userData.noMerge = !0), (m.userData.noRecv = !0));
+    return m;
+  }
+  // 樹冠：幾團有起伏的圓球併成一個網格；下面深、上面亮，團與團顏色略有不同
+  function rsCrown(rand, e) {
+    let pos = [],
+      nor = [],
+      col = [],
+      sw = [],
+      idx = [],
+      pal = [0x55a23f, 0x61ad45, 0x4a973b, 0x6cb54a],
+      lumps = [],
+      add = (x, y, z, R, c) => lumps.push({ x, y, z, R, sy: 0.84 + rand() * 0.14, c: new Se(pal[c % pal.length]), ph: rand() * 6.28 });
+    // 中間一大團、外圍一圈中團、上面幾小團：輪廓才會像一朵一朵的樹冠，而不是一顆球
+    add(0, 4.0 * e, 0, 1.75 * e, 0);
+    let ring = 5 + Math.floor(rand() * 2);
+    for (let c = 0; c < ring; c++) {
+      let a = (c / ring) * Math.PI * 2 + rand() * 0.5,
+        u = (1.15 + rand() * 0.35) * e;
+      add(Math.cos(a) * u, (3.45 + rand() * 0.7) * e, Math.sin(a) * u * 0.9, (1.0 + rand() * 0.35) * e, c + 1);
+    }
+    for (let c = 0; c < 3; c++) {
+      let a = rand() * Math.PI * 2,
+        u = (0.5 + rand() * 0.5) * e;
+      add(Math.cos(a) * u, (4.9 + rand() * 0.5) * e, Math.sin(a) * u, (0.8 + rand() * 0.3) * e, c);
+    }
+    let y0 = Math.min(...lumps.map((l) => l.y - l.R * l.sy)),
+      y1 = Math.max(...lumps.map((l) => l.y + l.R * l.sy)),
+      base = new dt(1, 20, 14),
+      bp = base.attributes.position,
+      bi = base.index.array,
+      v = new E();
+    for (let l of lumps) {
+      let off = pos.length / 3;
+      for (let i = 0; i < bp.count; i++) {
+        v.fromBufferAttribute(bp, i).normalize();
+        let k = 1 + 0.07 * Math.sin(v.x * 5.3 + l.ph) * Math.sin(v.y * 4.7 + l.ph * 1.7) + 0.05 * Math.sin(v.z * 7.1 + l.ph * 0.6),
+          px = l.x + v.x * l.R * k,
+          py = l.y + v.y * l.R * k * l.sy,
+          pz = l.z + v.z * l.R * k,
+          h = (py - y0) / (y1 - y0),
+          sh = 0.5 + 0.72 * h + 0.14 * v.y + 0.05 * Math.sin(v.x * 9 + v.z * 7 + l.ph);
+        (pos.push(px, py, pz), nor.push(v.x, v.y / l.sy, v.z));
+        col.push(Math.min(1, l.c.r * sh), Math.min(1, l.c.g * sh), Math.min(1, l.c.b * sh * 0.92));
+        sw.push(0.45 + 1.1 * h);
+      }
+      for (let i = 0; i < bi.length; i++) idx.push(bi[i] + off);
+    }
+    base.dispose();
+    return rsLeafMesh(pos, nor, col, sw, idx);
+  }
+  // 王棕的葉子：十幾片往外拱、尾端下垂的羽狀葉；每片葉子左右兩排小葉，邊緣一長一短
+  function rsPalmCrown(rand, top) {
+    let pos = [],
+      col = [],
+      sw = [],
+      idx = [],
+      N = 13,
+      S = 12,
+      cA = new Se(0x7fbf4a),
+      cB = new Se(0x2f7d34);
+    for (let f = 0; f < N; f++) {
+      let az = (f / N) * Math.PI * 2 + (rand() - 0.5) * 0.35,
+        tier = f % 3, // 0＝上層較直、2＝下層較垂
+        el = [1.15, 0.75, 0.38][tier] + (rand() - 0.5) * 0.18,
+        L = [3.3, 3.9, 3.7][tier] * (0.92 + rand() * 0.16),
+        droop = [0.75, 1.0, 1.25][tier] * (0.9 + rand() * 0.25),
+        dx = Math.sin(az),
+        dz = Math.cos(az),
+        sxx = Math.cos(az),
+        szz = -Math.sin(az),
+        tint = 0.88 + rand() * 0.2,
+        b0 = pos.length / 3;
+      for (let i = 0; i <= S; i++) {
+        let t = i / S,
+          r = L * Math.cos(el) * (t - 0.12 * t * t) + 0.12,
+          y = top + L * (Math.sin(el) * t - droop * 0.5 * t * t),
+          w = 0.62 * Math.pow(Math.sin(Math.PI * (0.06 + 0.9 * t)), 0.7) * (i % 2 ? 0.62 : 1),
+          sag = w * (0.38 + 0.25 * t),
+          cx = dx * r,
+          cz = dz * r;
+        // 中肋（稍微隆起）、左緣、右緣
+        (pos.push(cx, y + 0.03, cz), pos.push(cx - sxx * w, y - sag, cz - szz * w), pos.push(cx + sxx * w, y - sag, cz + szz * w));
+        let k = (0.8 + 0.25 * t) * tint;
+        (col.push(cA.r * k, cA.g * k, cA.b * k), col.push(cB.r * tint, cB.g * tint, cB.b * tint), col.push(cB.r * tint, cB.g * tint, cB.b * tint));
+        (sw.push(t * 1.3), sw.push(t * 1.6 + 0.15), sw.push(t * 1.6 + 0.15));
+        if (i < S) {
+          let a = b0 + i * 3,
+            b = a + 3;
+          (idx.push(a, a + 1, b, b, a + 1, b + 1), idx.push(a, b, a + 2, b, b + 2, a + 2));
+        }
+      }
+    }
+    return rsLeafMesh(pos, null, col, sw, idx);
+  }
+  // 草坪上的小花：一次畫完（不擋路、不能互動），花色用白、黃、粉、淡紫
+  function rsFlowers(lawns, palms) {
+    let pts = [],
+      r = Qi(77),
+      cols = [0xffffff, 0xffd84a, 0xff9fb6, 0xc9a7ff, 0xff7a59];
+    for (let [x0, x1, z0, z1] of lawns) {
+      let n = Math.min(90, Math.round(((x1 - x0) * (z1 - z0)) / 2.2));
+      for (let i = 0; i < n; i++) {
+        let x = x0 + 0.4 + r() * (x1 - x0 - 0.8),
+          z = z0 + 0.35 + r() * (z1 - z0 - 0.7);
+        if (palms.some(([px, pz]) => Math.hypot(px - x, pz - z) < 0.8)) continue;
+        pts.push([x, z, 0.7 + r() * 0.6, cols[Math.floor(r() * cols.length)]]);
+      }
+    }
+    if (!pts.length) return null;
+    let im = new ui(new Ki(0.085, 0), new nt({ color: 16777215 }), pts.length),
+      m = new we(),
+      c = new Se();
+    pts.forEach(([x, z, s, co], i) => {
+      (m.makeScale(s, s * 0.75, s), m.setPosition(x, 0.2 + s * 0.05, z), im.setMatrixAt(i, m), im.setColorAt(i, c.set(co)));
+    });
+    ((im.instanceMatrix.needsUpdate = !0), im.instanceColor && (im.instanceColor.needsUpdate = !0));
+    ((im.userData.noOutline = !0), (im.userData.noMerge = !0), (im.frustumCulled = !1), (im.raycast = () => {}));
+    return im;
+  }
+  // 大型物件底下的接地陰影（貼在地面的柔邊暗塊）：沒有它，物件看起來像浮在地上
+  function rsGroundShade(x, z, w, d, op = 0.55) {
+    let m = Dn(w, d, op);
+    return ((m.position.x = x), (m.position.z = z), (m.userData.noMerge = !0), m);
   }
   // ===== v0.8.5：人物配件（眼鏡、背包、玩偶、計算機、斜背水壺、助聽器、頸掛風扇、鉛筆） =====
   function avAccessories(s, n, r, m, A, R) {
@@ -37413,17 +38077,17 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       (i.arms[1].rotation.x = c * 0.8),
       (i.body.position.y = t ? Math.abs(Math.sin(i.phase)) * 0.05 : i.body.position.y * (1 - a)));
   }
-  function Cf(s, e) {
+  function Cf(s, e, dt) {
     let t = s.userData.rig;
-    if (t && t.kit) return t.kit.walk(1 / 60, !1);
+    if (t && t.kit) return t.kit.walk(dt || 1 / 60, !1);
     t &&
       ((t.body.position.y = Math.sin(e * 2) * 0.015),
       (t.arms[0].rotation.x = Math.sin(e * 1.3) * 0.05),
       (t.arms[1].rotation.x = -Math.sin(e * 1.3) * 0.05));
   }
-  function Df(s, e) {
+  function Df(s, e, dt) {
     let t = s.userData.rig;
-    if (t && t.kit) return t.kit.talk(e, 1 / 60);
+    if (t && t.kit) return t.kit.talk(e, dt || 1 / 60);
     t && (t.arms[1].rotation.z = 2.5 + Math.sin(e * 8) * 0.35);
   }
   function Bf(s) {
@@ -38301,6 +38965,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
           (this.rotateInput = 0),
           (this.intro = null),
           (this.rig = new tc(t, this.scene)),
+          rsLookInit(this),
           (this.fx = new nc(this.scene)));
         let i = Of(this.scene);
         ((this.labels = i.labels), (this.root = i.root));
@@ -38369,7 +39034,12 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
         (this.rig.setQuality(this.quality, this.scene),
           this.grass.setQuality(this.quality),
           Ko(this.scene, Ks[this.quality].outlines),
+          rsLookQuality(this),
           this.w && this.resize());
+      }
+      // v2.12.0：畫一格（有後製就走後製）。測試與錄影也呼叫這個，畫面才和實際一樣
+      draw(t) {
+        rsLookDraw(this, t);
       }
       checkFps(e) {
         if (this.qualityMode !== "auto" || this.quality === "low" || this.mode === "home") return;
@@ -38405,7 +39075,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
           (this.update(i, r),
             e && e(i, r),
             this.updateStyle(i, r),
-            this.renderer.render(this.scene, this.camera),
+            this.draw(r),
             this.checkFps(Math.min(0.5, n)));
         };
         t();
@@ -38421,12 +39091,27 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
           this.grass.update(t, n, i),
           this.fx.update(e, this.camera));
       }
+      // v2.11.0：讓人物做表情動作。who："player" 或 "teacher"（目前這一站的老師）；減少動態效果時不做
+      emote(who, name) {
+        if (this.reduced) return;
+        let n = who === "player" ? this.player : this.activeStation ? (this.npcFor(this.activeStation) || {}).ch : null,
+          k = n && n.userData.rig && n.userData.rig.kit;
+        k && k.emote && k.emote(name);
+      }
+      // 作答時鏡頭對著道具，常常看不到人物；所以回到操場（鏡頭回到人物身後）時再做一次，學生才看得到
+      emoteLater(p, t) {
+        this.reduced || ((this._pendEm = { p, t }), (this._pendT = 0));
+      }
       celebrate() {
+        // v2.14.0：有人物特寫時，歡呼留到鏡頭轉過去才做；沒有特寫（減少動態、人物不在）就馬上做
+        this.emoteLater("cheer", "praise");
+        rsHeroShot(this) || (this.emote("player", "cheer"), this.emote("teacher", "praise"));
         if (this.reduced || !this.answerFit) return;
         let e = this.answerFit.center;
         this.fx.correct(new E(e.x, 0.3, e.z), Math.min(4, Math.max(2.4, this.answerFit.size.x * 0.4)));
       }
-      tweenCamera(e, t, n) {
+      // v2.14.0：第 4 個參數是秒數（預設 0.8）；超過 1.2 秒的長鏡頭改用「慢進慢出」
+      tweenCamera(e, t, n, dur) {
         if (n || this.reduced) {
           (this.camPos.copy(e), this.camLook.copy(t), this.camera.position.copy(e), this.camera.lookAt(t), (this.camTween = null));
           return;
@@ -38437,7 +39122,8 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
           toP: e.clone(),
           toL: t.clone(),
           t: 0,
-          dur: 0.8,
+          dur: dur || 0.8,
+          slow: (dur || 0.8) > 1.2,
         };
       }
       setHomeCamera(e) {
@@ -38452,7 +39138,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
           gy = rsGroundY(this.pos.x, this.pos.z),
           ty = gy + H * RS_CAM.lookH,
           pit = Fs.degToRad(this.view.pitch),
-          d = this.view.dist * p,
+          d = this.view.dist * p * (this.rsZoom || 1),
           r = d * Math.cos(pit),
           y = Math.max(gy + RS_CAM.ground, ty + d * Math.sin(pit)),
           look = new E(this.pos.x, ty + RS_CAM.lookUp, this.pos.z);
@@ -38576,13 +39262,16 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
         this.tweenCamera(d, h, e);
       }
       setMode(e) {
+        let prev = this.mode;
+        this._camQ = null;
         if (((this.mode = e), e === "home"))
           (this.clearProps(), this.guide.hide(), this.player && (this.player.visible = !1), this.setHomeCamera(!1));
         else if (e === "explore") {
           (this.clearProps(), this.player && (this.player.visible = !0));
           this.player && this.player.position.set(this.pos.x, rsGroundY(this.pos.x, this.pos.z), this.pos.z);
           let t = this.followTarget();
-          ((this.occDist = null), this.avoidOcclusion(t, 1), this.tweenCamera(t.pos, t.look, !1));
+          // v2.14.0：從首頁進操場時，鏡頭從空中慢慢飛到人物身後（約 2 秒）；其他時候維持原本的 0.8 秒
+          ((this.occDist = null), this.avoidOcclusion(t, 1), this.tweenCamera(t.pos, t.look, !1, prev === "home" ? 2.1 : 0.8));
         }
       }
       setAvatar(e) {
@@ -38603,7 +39292,8 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
           this.resetView(!0),
           this.player && (this.player.position.set(this.pos.x, rsGroundY(this.pos.x, this.pos.z), this.pos.z), (this.player.rotation.y = this.heading)));
         let e = this.followTarget();
-        ((this.occDist = null), this.avoidOcclusion(e, 1), this.tweenCamera(e.pos, e.look, !0));
+        // v2.14.0：在首頁時不要先把鏡頭跳到人物身後，留給 setMode("explore") 從空中飛過去
+        ((this.occDist = null), this.avoidOcclusion(e, 1), (this.mode === "home" && !this.reduced) || this.tweenCamera(e.pos, e.look, !0));
       }
       npcFor(e) {
         let id = RS_STATION_TEACHER[e];
@@ -38674,10 +39364,11 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
         ((this.path = null), (this.joy = null), (this.keyVec = null));
       }
       update(e, t) {
+        rsCamTick(this, e);
         if (this.camTween) {
           let l = this.camTween;
           l.t += e / l.dur;
-          let h = l.t >= 1 ? 1 : 1 - Math.pow(1 - l.t, 3);
+          let h = l.t >= 1 ? 1 : l.slow ? l.t * l.t * l.t * (l.t * (l.t * 6 - 15) + 10) : 1 - Math.pow(1 - l.t, 3);
           (this.camera.position.lerpVectors(l.fromP, l.toP, h),
             this.camLook.lerpVectors(l.fromL, l.toL, h),
             this.camera.lookAt(this.camLook),
@@ -38686,8 +39377,8 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
         }
         this.intro &&
           ((this.intro.t += e), this.intro.tl.apply(this.intro.t), this.intro.t >= this.intro.tl.duration + 0.7 && this.finishIntro());
-        for (let l of Object.values(this.npcs)) l === this.wavingNpc ? Df(l.ch, t) : Cf(l.ch, t + l.ch.position.x);
-        for (let l of this.rsTeachers || []) l === this.wavingNpc ? Df(l.ch, t) : l.talk > 0 || Cf(l.ch, t);
+        for (let l of Object.values(this.npcs)) l === this.wavingNpc ? Df(l.ch, t, e) : Cf(l.ch, t + l.ch.position.x, e);
+        for (let l of this.rsTeachers || []) l === this.wavingNpc ? Df(l.ch, t, e) : l.talk > 0 || Cf(l.ch, t, e);
         rsTeacherIdle(this, e, t);
         rsBoardTick(this, e);
         rsFlagTick(t, this.reduced);
@@ -38850,14 +39541,77 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
         n.add(new qs(16777215, 9080682, 1.7));
         let i = new Zi(16777215, 1.4);
         (i.position.set(2, 4, 5), n.add(i));
-        let r = new It(30, 1, 0.1, 50);
-        (r.position.set(0, 1.75, 6.2), r.lookAt(0, 1.42, 0));
+        // v3.0：縮圖改成半身近照（臉看得清楚，才認得出是誰）
+        let r = new It(24, 1, 0.1, 50);
         let a = {};
         for (let o of Ai) {
-          let c = Nh(ic(o));
-          ((c.rotation.y = 0.35), c.scale.multiplyScalar(1.85), n.add(c), t.render(n, r), (a[o.id] = t.domElement.toDataURL("image/png")), n.remove(c));
+          let c = Nh(ic(o)),
+            H = (c.userData.rig && c.userData.rig.H) || 1.5;
+          (r.position.set(0.32, H - 0.13, 2.05), r.lookAt(0, H - 0.2, 0));
+          ((c.rotation.y = 0.3), n.add(c), t.render(n, r), (a[o.id] = t.domElement.toDataURL("image/png")), n.remove(c));
         }
         return (t.dispose(), a);
+      }
+      // v3.0：選角畫面的展示臺。人物會慢慢轉、會眨眼；手指或滑鼠左右拖可以轉著看
+      avatarStage(cv) {
+        let R;
+        try {
+          R = new _s({ canvas: cv, antialias: !0, alpha: !0 });
+        } catch {
+          return null;
+        }
+        R.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        let sc = new Br();
+        sc.add(new qs(16777215, 9080682, 1.7));
+        let sun = new Zi(16777215, 1.4);
+        (sun.position.set(2, 4, 5), sc.add(sun));
+        let rim = new Zi(16772280, 0.7);
+        (rim.position.set(-3, 3, -4), sc.add(rim));
+        let floor = new ne(new sn(0.62, 40), new nt({ color: 3105945, transparent: !0, opacity: 0.16, depthWrite: !1 }));
+        ((floor.rotation.x = -Math.PI / 2), (floor.position.y = 0.004), sc.add(floor));
+        let cam = new It(25, 1, 0.1, 50),
+          st = { ch: null, id: null, yaw: 0.45, drag: !1, lx: 0, idle: 0, raf: 0, last: 0, dead: !1 },
+          fit = () => {
+            let w = cv.clientWidth || 260,
+              h = cv.clientHeight || 380;
+            (R.setSize(w, h, !1), (cam.aspect = w / h), cam.updateProjectionMatrix());
+          },
+          frame = (ms) => {
+            if (st.dead) return;
+            st.raf = requestAnimationFrame(frame);
+            let dt = Math.min(0.05, (ms - (st.last || ms)) / 1e3);
+            st.last = ms;
+            if (!st.ch) return;
+            (st.drag || (st.idle > 0 ? (st.idle -= dt) : (st.yaw += dt * 0.45)), (st.ch.rotation.y = st.yaw));
+            let k = st.ch.userData.rig && st.ch.userData.rig.kit;
+            k && k.walk(dt, !1);
+            R.render(sc, cam);
+          },
+          down = (e) => ((st.drag = !0), (st.lx = e.clientX), cv.setPointerCapture && cv.setPointerCapture(e.pointerId)),
+          move = (e) => st.drag && ((st.yaw += (e.clientX - st.lx) * 0.012), (st.lx = e.clientX)),
+          up = () => ((st.drag = !1), (st.idle = 2.5));
+        (cv.addEventListener("pointerdown", down), cv.addEventListener("pointermove", move), cv.addEventListener("pointerup", up), cv.addEventListener("pointercancel", up));
+        cv.style.touchAction = "none";
+        fit();
+        st.raf = requestAnimationFrame(frame);
+        return {
+          show(id) {
+            if (id === st.id) return;
+            st.ch && sc.remove(st.ch);
+            let o = Ai.find((x) => x.id === id);
+            if (!o) return ((st.ch = null), (st.id = null), R.clear());
+            ((st.ch = Nh(ic(o))), (st.id = id), (st.yaw = 0.45), (st.idle = 1.2), sc.add(st.ch));
+            let H = (st.ch.userData.rig && st.ch.userData.rig.H) || 1.5;
+            (cam.position.set(0, 0.95, 3.75 * Math.max(1, H / 1.5)), cam.lookAt(0, 0.84 * Math.max(1, H / 1.5), 0), fit());
+          },
+          dispose() {
+            ((st.dead = !0), cancelAnimationFrame(st.raf));
+            (cv.removeEventListener("pointerdown", down), cv.removeEventListener("pointermove", move), cv.removeEventListener("pointerup", up), cv.removeEventListener("pointercancel", up));
+            try {
+              (R.dispose(), R.forceContextLoss && R.forceContextLoss());
+            } catch {}
+          },
+        };
       }
     };
   function cx(s, e, t) {
