@@ -212,6 +212,22 @@
     }
   }
 
+  // ---------- 練習中的全螢幕按鈕（v3.1.1）：進入操場後，上方工具列「回首頁」左邊也有一顆，不用回首頁才能切換 ----------
+  function decorateHud() {
+    var hud = document.querySelector('#overlay3d > .hud');
+    if (!hud) return;
+    var btn = hud.querySelector('#btn-fullscreen-hud');
+    if (isStandalone() || !canFullscreen()) { btn && btn.remove(); return; }
+    var fs = inFullscreen(), want = fs ? '1' : '0';
+    if (btn && btn.dataset.fs === want) return;
+    var html = '<span style="display:inline-flex">' + (fs ? ICON_FS_EXIT : ICON_FS) + '</span><span class="lbl">' + (fs ? '離開全螢幕' : '全螢幕') + '</span>';
+    if (btn) { btn.innerHTML = html; btn.dataset.fs = want; btn.setAttribute('aria-pressed', String(fs)); btn.setAttribute('aria-label', fs ? '離開全螢幕' : '全螢幕'); return; }
+    btn = el('button', { type: 'button', class: 'iconbtn', id: 'btn-fullscreen-hud', 'aria-pressed': String(fs), 'aria-label': fs ? '離開全螢幕' : '全螢幕', html: html, onclick: toggleFullscreen });
+    btn.dataset.fs = want;
+    var home = hud.querySelector('#btn-home');
+    home ? hud.insertBefore(btn, home) : hud.appendChild(btn);
+  }
+
   // ---------- 直放提示：轉成橫放後自動收起（不中斷練習） ----------
   function onOrientation() {
     if (window.innerWidth > window.innerHeight) {
@@ -272,7 +288,7 @@
     decorateHome();
   });
   window.addEventListener('appinstalled', function () { deferredPrompt = null; installedThisSession = true; decorateHome(); });
-  ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (ev) { document.addEventListener(ev, decorateHome); });
+  ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (ev) { document.addEventListener(ev, function () { decorateHome(); decorateHud(); }); });
   if (window.matchMedia) {
     ['(display-mode: standalone)', '(orientation: landscape)'].forEach(function (q) {
       var mq = matchMedia(q);
@@ -289,6 +305,7 @@
       new MutationObserver(function () {
         var foot = document.querySelector('.home .foot');
         if (foot && !foot.dataset.pwa) { foot.dataset.pwa = '1'; decorateHome(); }
+        decorateHud();
       }).observe(overlay, { childList: true, subtree: true });
     }
     decorateHome();

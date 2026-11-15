@@ -19,7 +19,7 @@
   var RS_MOVE = { walk: 5, run: 1.7, accel: 10, decel: 14, turn: 12, maxTurn: 14, dead: 0.12, minJoy: 0.35, stride: 1.3 };
   var ut = {
     name: "操場中的數學",
-    appVersion: "3.0.0",
+    appVersion: "3.2.1",
     teacherPassword: "8642",
     questionsPerSession: 9,
     questionsPerSessionOptions: [8, 9, 10],
@@ -5315,6 +5315,7 @@
       let list = r.practices.map((x) => ({ id: String(x.id), section: String(x.section), n: Number(x.n) || 0, first: Number(x.first) || 0 })),
         all = ar("history.v1", {}) || {};
       ((all[code] = { at: Gn(), practices: list }), or("history.v1", all));
+      r.wallet && rsFpMerge(code, r.wallet); // v3.2.0：代幣、貼紙、造型也跟著換平板
       return { ok: !0, changed: rs1RestoreDone(code, list) };
     } catch {
       return { ok: !1, changed: !1 };
@@ -8065,6 +8066,10 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       pg.addEventListener("change", () => {
         ((e.playOff = !pg.checked), a(pg.checked ? "學生可以點遊樂設施和涼亭進去玩。" : "遊樂設施不開放，點了只會走過去。"));
       });
+      let fp = T("input", { type: "checkbox", id: "allow-free", checked: rsFpOn() });
+      fp.addEventListener("change", () => {
+        ((e.freeOff = !fp.checked), a(fp.checked ? "完成一個小節後，學生可以留在操場找貼紙、做挑戰、換造型。" : "關閉自由活動：完成後沒有「留在操場玩」，也不發代幣。"));
+      });
       let d = T("input", { type: "checkbox", id: "allow-camera", checked: Ei() });
       d.addEventListener("change", () => {
         ((e.allowCamera = d.checked), a(d.checked ? "學生可以調整視角。" : "視角固定為斜俯視，學生不能調整。"));
@@ -8084,6 +8089,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
             T("label", { class: "ck" }, h, "音效"),
             T("label", { class: "ck" }, d, "允許調整視角"),
             T("label", { class: "ck" }, pg, "開放遊樂設施（溜滑梯、鞦韆、旋轉塔、投籃、涼亭）"),
+            T("label", { class: "ck" }, fp, "完成小節後開放自由活動（找貼紙、挑戰、代幣換造型）"),
             T("label", { class: "ck" }, "畫質 ", p),
           ),
         ),
@@ -9006,6 +9012,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       }
       goHome(keep) {
         // 2.7.0：練習中或練習完按「回首頁」（keep）時，學生維持登入、回到單元首頁；其他情況回到選入口
+        rsFpEnd(this);
         let keepCode = keep && RS_ENTRY.mode === "student" ? RS_ENTRY.code : null;
         (rsSetEntry(null), keepCode && ((RS_ENTRY.mode = "student"), (RS_ENTRY.code = keepCode)), (RS1_CUR = null), rs1ApplyBody(), this.world && (rsShowNpcs(this.world, ["court", "stage", "grass"]), rsTeachersHome(this.world), rsBoardRefresh(this.world, rsBoardCode())));
         (this.play && this.exitPlay(!0),
@@ -9089,6 +9096,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
           ),
         );
         RS_ENTRY.mode || rsEntryHero(this, t);
+        RS_ENTRY.mode || t.append(rsQrButton()); // v3.1.0：首頁左下角的 QR code，點一下放大
         this.overlay.append(t);
       }
       async onEntry(mode) {
@@ -9141,11 +9149,12 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         (Cu(pick.code, av), this.startSession(e, pick.code, av, pick.section));
       }
       startSession(e, t, n, sec) {
+        rsFpEnd(this);
         ((RS1_CUR = sec ? { code: t, section: sec, task: rs1Task(t, sec) } : null), rs1ApplyBody(), rsShowNpcs(this.world, sec ? [] : null), rsBoardRefresh(this.world, t));
         (this.removeOverlay(".home"),
           (this.unit = e),
           (this.session = new xa({ code: t, unitId: e.id, avatar: n, section: sec })),
-          this.world.setAvatar(n),
+          this.world.setAvatar(n, rsFpCos(t)),
           this.world.setViewLocked(!Ei()),
           this.world.resetPlayer(),
           this.world.collect.show(Pc(t, e.id)),
@@ -9235,6 +9244,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         this.removeOverlay(".hud");
         let e = this.session;
         if (!e) return;
+        if (this.free) return void rsFpHud(this); // v3.2.0：自由活動有自己的工具列
         let t = this.mode === "answer" || this.mode === "intro",
           n = e.cur,
           i = n ? n.q.short : "",
@@ -9328,7 +9338,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
           this.world.walkToStation();
           return;
         }
-        let pk = rsPlayOn() && !this.session.done ? plPick(this.world, e, t) : null;
+        let pk = rsPlayOn() && (!this.session.done || this.free) && !(this.free && this.free.dash) ? plPick(this.world, e, t) : null;
         if (pk) {
           this.goPlay(pk);
           return;
@@ -9347,7 +9357,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         ((this.pendingPlay = { tg: tg, go: a }), w.walkTo(a), this.toast(`走到${tg.name}……`, 2000));
       }
       updatePlayNear() {
-        let ok = rsPlayOn() && this.session && !this.session.done && !this.bubble && !Mi() && !this.pendingPlay,
+        let ok = rsPlayOn() && this.session && (!this.session.done || this.free) && !(this.free && this.free.dash) && !this.bubble && !Mi() && !this.pendingPlay,
           t = ok ? plNear(this.world.pos) : null,
           el = this.overlay.querySelector(".play-near");
         if (!t) {
@@ -9454,6 +9464,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
           }
         }
         this.updatePlayNear();
+        if (this.free) return void rsFpFrame(this); // v3.2.0：自由活動沒有任務站，只處理貼紙和挑戰
         let e = this.world.distToStation();
         if (
           (e < this.bestDist - 1 && ((this.bestDist = e), (this.lastProgress = performance.now())),
@@ -9616,7 +9627,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       onSubmit(e) {
         let t = this.session.submit(e);
         return (
-          t.correct && t.questionDone ? (Ri.correct(), this.world.celebrate(), rsFlyStar(this.world)) : t.correct ? Ri.accept() : t.correct === !1 && (Ri.soft(), this.world.emote && (this.world.emote("player", "scratch"), this.world.emoteLater("scratch", null))),
+          t.correct && t.questionDone ? (Ri.correct(), this.world.celebrate(), rsFlyStar(this.world), rsFpTaskCoin(this)) : t.correct ? Ri.accept() : t.correct === !1 && (Ri.soft(), this.world.emote && (this.world.emote("player", "scratch"), this.world.emoteLater("scratch", null))),
           t
         );
       }
@@ -9700,6 +9711,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
                 ? T("div", { class: "lit" }, `你在操場上點亮了：${e.name}`)
                 : T("div", { class: "lit" }, "操場上的收集物都點亮了！"),
             rs1ResultCard(t),
+            rsFpOn() && t.section && t.fpCoins ? T("p", { id: "fp-sum-coins", style: { margin: "4px 0", fontWeight: "700" } }, `🪙 這次有 ${t.fpCoins} 個任務一次就答對，拿到 ${t.fpCoins} 枚代幣。`) : null,
             T(
               "div",
               { class: "stats" },
@@ -9768,6 +9780,21 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
                 },
                 "回關卡選擇",
               ),
+              rsFpOn() && t.section
+                ? T(
+                    "button",
+                    {
+                      type: "button",
+                      class: "btn",
+                      id: "btn-summary-free",
+                      style: { borderColor: "#f0c94a", background: "#fffbea" },
+                      onclick: () => {
+                        (c.close(), rsFpStart(this));
+                      },
+                    },
+                    "留在操場玩（找貼紙、挑戰）",
+                  )
+                : null,
             ),
           ),
           c = Qn(o, { label: "練習完成" });
@@ -9805,6 +9832,234 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         (Cu(code, av), this.startSession(unit, code, av, sec));
       }
     };
+  /* ===== v3.1.0：首頁 QR code（掃描就能在別台裝置開啟練習器），點一下放大 =====
+     QR 圖是程式自己算出來的（位元組模式、容錯等級 M、版本 1～10），不連網、不用外部圖片。 */
+  function rsQrUrl() {
+    let d = "https://bbbbbbbb86.github.io/playground-math/";
+    try {
+      let L = location;
+      if (L.protocol === "https:" && !/claude|anthropic|usercontent|localhost|^127\./.test(L.hostname)) return L.origin + L.pathname.replace(/[^/]*$/, "");
+    } catch {}
+    return d;
+  }
+  function rsQrMatrix(text) {
+    let data = Array.from(new TextEncoder().encode(text)),
+      TOT = [26, 44, 70, 100, 134, 172, 196, 242, 292, 346],
+      ECB = [10, 16, 26, 18, 24, 16, 18, 22, 22, 26],
+      NB = [1, 1, 1, 2, 2, 4, 4, 4, 5, 5],
+      AL = [[], [6, 18], [6, 22], [6, 26], [6, 30], [6, 34], [6, 22, 38], [6, 24, 42], [6, 26, 46], [6, 28, 50]],
+      v = 0,
+      nd = 0;
+    for (; v < 10; v++) {
+      nd = TOT[v] - ECB[v] * NB[v];
+      if (data.length + (v < 9 ? 2 : 3) <= nd) break;
+    }
+    if (v > 9) return null;
+    // 1) 資料位元：模式 0100、長度、內容、結尾、補滿
+    let bits = [],
+      push = (val, len) => {
+        for (let i = len - 1; i >= 0; i--) bits.push((val >>> i) & 1);
+      };
+    (push(4, 4), push(data.length, v < 9 ? 8 : 16));
+    for (let b of data) push(b, 8);
+    push(0, Math.min(4, nd * 8 - bits.length));
+    while (bits.length % 8) bits.push(0);
+    let cw = [];
+    for (let i = 0; i < bits.length; i += 8) cw.push(parseInt(bits.slice(i, i + 8).join(""), 2));
+    for (let k = 0; cw.length < nd; k++) cw.push(k % 2 ? 17 : 236);
+    // 2) 里德所羅門錯誤更正碼
+    let EXP = new Uint8Array(512),
+      LOG = new Uint8Array(256);
+    for (let i = 0, x = 1; i < 255; i++) ((EXP[i] = x), (LOG[x] = i), (x <<= 1), x & 256 && (x ^= 285));
+    for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+    let ec = ECB[v],
+      gen = [1];
+    for (let i = 0; i < ec; i++) {
+      let nx = new Array(gen.length + 1).fill(0);
+      for (let j = 0; j < gen.length; j++) ((nx[j] ^= gen[j]), gen[j] && (nx[j + 1] ^= EXP[LOG[gen[j]] + i]));
+      gen = nx;
+    }
+    let rs = (blk) => {
+        let r = new Array(ec).fill(0);
+        for (let b of blk) {
+          let f = b ^ r.shift();
+          r.push(0);
+          if (f) for (let j = 0; j < ec; j++) gen[j + 1] && (r[j] ^= EXP[LOG[gen[j + 1]] + LOG[f]]);
+        }
+        return r;
+      },
+      nb = NB[v],
+      sl = Math.floor(nd / nb),
+      ns = nb - (nd % nb),
+      blocks = [],
+      ecs = [];
+    for (let i = 0, p = 0; i < nb; i++) {
+      let len = sl + (i < ns ? 0 : 1),
+        blk = cw.slice(p, p + len);
+      ((p += len), blocks.push(blk), ecs.push(rs(blk)));
+    }
+    let out = [];
+    for (let i = 0; i <= sl; i++) for (let b of blocks) i < b.length && out.push(b[i]);
+    for (let i = 0; i < ec; i++) for (let e of ecs) out.push(e[i]);
+    // 3) 固定圖樣
+    let n = 21 + 4 * v,
+      M = Array.from({ length: n }, () => new Uint8Array(n)),
+      R = Array.from({ length: n }, () => new Uint8Array(n)),
+      set = (x, y, d) => {
+        x >= 0 && y >= 0 && x < n && y < n && ((M[y][x] = d ? 1 : 0), (R[y][x] = 1));
+      };
+    for (let [cx, cy] of [
+      [3, 3],
+      [n - 4, 3],
+      [3, n - 4],
+    ])
+      for (let dy = -4; dy <= 4; dy++)
+        for (let dx = -4; dx <= 4; dx++) {
+          let m = Math.max(Math.abs(dx), Math.abs(dy));
+          set(cx + dx, cy + dy, m !== 2 && m !== 4);
+        }
+    for (let i = 8; i < n - 8; i++) (set(i, 6, i % 2 === 0), set(6, i, i % 2 === 0));
+    let al = AL[v];
+    for (let ay of al)
+      for (let ax of al) {
+        if ((ax === 6 && ay === 6) || (ax === 6 && ay === n - 7) || (ax === n - 7 && ay === 6)) continue;
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) set(ax + dx, ay + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+      }
+    let fmt = (mask, real) => {
+      let rem = mask;
+      for (let i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 1335);
+      let f = ((mask << 10) | rem) ^ 21522,
+        bit = (i) => (real ? (f >>> i) & 1 : 0);
+      for (let i = 0; i <= 5; i++) set(8, i, bit(i));
+      (set(8, 7, bit(6)), set(8, 8, bit(7)), set(7, 8, bit(8)));
+      for (let i = 9; i < 15; i++) set(14 - i, 8, bit(i));
+      for (let i = 0; i < 8; i++) set(n - 1 - i, 8, bit(i));
+      for (let i = 8; i < 15; i++) set(8, n - 15 + i, bit(i));
+      set(8, n - 8, 1);
+    };
+    fmt(0, !1);
+    if (v >= 6) {
+      let ver = v + 1,
+        rem = ver;
+      for (let i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >>> 11) * 7973);
+      let vb = (ver << 12) | rem;
+      for (let i = 0; i < 18; i++) {
+        let a = n - 11 + (i % 3),
+          b = Math.floor(i / 3);
+        (set(a, b, (vb >>> i) & 1), set(b, a, (vb >>> i) & 1));
+      }
+    }
+    // 4) 放資料（從右下角往上蛇行）
+    let k = 0;
+    for (let right = n - 1; right >= 1; right -= 2) {
+      right === 6 && (right = 5);
+      for (let vert = 0; vert < n; vert++)
+        for (let j = 0; j < 2; j++) {
+          let x = right - j,
+            up = ((right + 1) & 2) === 0,
+            y = up ? n - 1 - vert : vert;
+          if (R[y][x]) continue;
+          ((M[y][x] = k < out.length * 8 ? (out[k >>> 3] >>> (7 - (k & 7))) & 1 : 0), k++);
+        }
+    }
+    // 5) 試 8 種遮罩，挑扣分最少的
+    let MASK = [
+        (x, y) => (x + y) % 2 === 0,
+        (x, y) => y % 2 === 0,
+        (x, y) => x % 3 === 0,
+        (x, y) => (x + y) % 3 === 0,
+        (x, y) => (Math.floor(y / 2) + Math.floor(x / 3)) % 2 === 0,
+        (x, y) => ((x * y) % 2) + ((x * y) % 3) === 0,
+        (x, y) => (((x * y) % 2) + ((x * y) % 3)) % 2 === 0,
+        (x, y) => (((x + y) % 2) + ((x * y) % 3)) % 2 === 0,
+      ],
+      apply = (m) => {
+        for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) !R[y][x] && MASK[m](x, y) && (M[y][x] ^= 1);
+      },
+      score = () => {
+        let s = 0,
+          dark = 0,
+          line = (get) => {
+            for (let a = 0; a < n; a++) {
+              let run = 1,
+                hist = 0;
+              for (let b = 0; b < n; b++) {
+                let c = get(a, b);
+                hist = ((hist << 1) | c) & 2047;
+                b >= 10 && (hist === 93 || hist === 1488) && (s += 40);
+                if (b && c === get(a, b - 1)) (run++, run === 5 ? (s += 3) : run > 5 && s++);
+                else run = 1;
+              }
+            }
+          };
+        (line((a, b) => M[a][b]), line((a, b) => M[b][a]));
+        for (let y = 0; y < n; y++)
+          for (let x = 0; x < n; x++) {
+            dark += M[y][x];
+            x < n - 1 && y < n - 1 && M[y][x] === M[y][x + 1] && M[y][x] === M[y + 1][x] && M[y][x] === M[y + 1][x + 1] && (s += 3);
+          }
+        return s + Math.floor(Math.abs((dark * 20) / (n * n) - 10)) * 10;
+      },
+      best = 0,
+      bs = 1 / 0;
+    for (let m = 0; m < 8; m++) {
+      (apply(m), fmt(m, !0));
+      let sc = score();
+      (sc < bs && ((bs = sc), (best = m)), apply(m));
+    }
+    (apply(best), fmt(best, !0));
+    return M;
+  }
+  // 把 QR 畫到畫布上（px：整張圖的邊長，含四格白邊）
+  function rsQrCanvas(text, px) {
+    let M = rsQrMatrix(text),
+      c = document.createElement("canvas");
+    if (!M) return c;
+    let n = M.length,
+      cell = Math.max(1, Math.floor(px / (n + 8))),
+      S = cell * (n + 8),
+      g = c.getContext("2d");
+    ((c.width = c.height = S), (g.fillStyle = "#ffffff"), g.fillRect(0, 0, S, S), (g.fillStyle = "#14261b"));
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) M[y][x] && g.fillRect((x + 4) * cell, (y + 4) * cell, cell, cell);
+    return c;
+  }
+  function rsQrCss() {
+    if (document.getElementById("rs-qr-css")) return;
+    let st = document.createElement("style");
+    ((st.id = "rs-qr-css"),
+      (st.textContent = [
+        ".rs-qr-btn{position:absolute;left:calc(12px + env(safe-area-inset-left,0px));bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:3;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 6px 4px;border:2px solid #1f4d2e;border-radius:12px;background:#fff;box-shadow:0 3px 0 rgba(31,77,46,.35);cursor:pointer;pointer-events:auto;font:700 12px/1.2 'Noto Sans TC',sans-serif;color:#1f4d2e;transition:transform .12s}",
+        ".rs-qr-btn:active{transform:scale(.95)}.rs-qr-btn canvas{width:clamp(56px,9vmin,84px);height:clamp(56px,9vmin,84px);image-rendering:pixelated;display:block}",
+        ".rs-qr-mask{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(15,30,22,.72);padding:16px}",
+        ".rs-qr-box{display:flex;flex-direction:column;align-items:center;gap:10px;max-width:92vw;padding:18px 18px 14px;border-radius:18px;background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.35);font-family:'Noto Sans TC',sans-serif;color:#14261b;text-align:center}",
+        ".rs-qr-box h2{margin:0;font-size:20px}.rs-qr-box canvas{width:min(72vmin,440px);height:min(72vmin,440px);image-rendering:pixelated}",
+        ".rs-qr-box .rs-qr-url{font-size:13px;word-break:break-all;color:#3b5246;max-width:min(72vmin,440px)}",
+        // 直放時入口按鈕會排到最下面，QR 圖往上移，不要壓到按鈕
+        "@media (orientation:portrait){.rs-qr-btn{bottom:calc(19vh + env(safe-area-inset-bottom,0px))}}",
+        "@media (prefers-reduced-motion:reduce){.rs-qr-btn{transition:none}}",
+      ].join("")),
+      document.head.append(st));
+  }
+  function rsQrOpen() {
+    if (document.getElementById("rs-qr-mask")) return;
+    let url = rsQrUrl(),
+      close = () => {
+        (mask.remove(), document.removeEventListener("keydown", key));
+        let b = document.getElementById("home-qr");
+        b && b.focus();
+      },
+      key = (ev) => ev.key === "Escape" && close(),
+      btn = T("button", { type: "button", class: "btn primary", id: "rs-qr-close", onclick: () => close() }, "關閉"),
+      box = T("div", { class: "rs-qr-box", role: "dialog", "aria-modal": "true", "aria-label": "掃描 QR code 開啟操場中的數學" }, T("h2", {}, "用相機掃描，開啟「操場中的數學」"), rsQrCanvas(url, 880), T("div", { class: "rs-qr-url" }, url), btn),
+      mask = T("div", { class: "rs-qr-mask", id: "rs-qr-mask", onclick: (ev) => ev.target === mask && close() }, box);
+    (document.body.append(mask), document.addEventListener("keydown", key), btn.focus());
+  }
+  // 首頁左下角的小 QR 圖
+  function rsQrButton() {
+    rsQrCss();
+    return T("button", { type: "button", class: "rs-qr-btn", id: "home-qr", "aria-label": "顯示 QR code（點一下放大）", onclick: () => rsQrOpen() }, rsQrCanvas(rsQrUrl(), 240), T("span", {}, "掃描開啟"));
+  }
+  window.__rsQrTest = { matrix: rsQrMatrix, canvas: rsQrCanvas, url: rsQrUrl }; // 測試用
   var Cp = 1,
     Mh = 2,
     Yn = 3,
@@ -32149,11 +32404,11 @@ normal = normalize( vNormal );`,
   var RS = {
     granite: "#a9adb0",
     schoolWall: "#f1efe8",
-    dado: "#26383a",
+    dado: "#5d7a7c",
     tile: "#e8eae6",
     woodTile: "#c8b596",
-    woodDark: "#6b4635",
-    steel: 4930099,
+    woodDark: "#8c6249",
+    steel: 7227980,
     canopy: 13625572,
     rubber: "#4f6b58",
     wallSky: "#b7ddf3",
@@ -32361,6 +32616,47 @@ normal = normalize( vNormal );`,
       G.add(rsLine(cx - w / 2, cz - d / 2, cx - w / 2, cz + d / 2, wid, y, mat)),
       G.add(rsLine(cx + w / 2, cz - d / 2, cx + w / 2, cz + d / 2, wid, y, mat)));
   }
+  // v3.1.0：穿堂開口改成一張有透視的走廊圖（天花板、兩側牆、地板、盡頭的光和樹），不再是一塊黑底加白色方塊
+  var rsPassageTex = () =>
+    rsTex("rsPassage", 440, 260, (g, W, H) => {
+      let x0 = W * 0.3,
+        x1 = W * 0.7,
+        y0 = H * 0.2,
+        y1 = H * 0.74,
+        quad = (pts, fill) => {
+          (g.beginPath(), pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))), g.closePath(), (g.fillStyle = fill), g.fill());
+        },
+        grad = (xa, ya, xb, yb, a, b) => {
+          let q = g.createLinearGradient(xa, ya, xb, yb);
+          return (q.addColorStop(0, a), q.addColorStop(1, b), q);
+        };
+      // 盡頭：亮的天空、樹、地面
+      ((g.fillStyle = grad(0, y0, 0, y1, "#eef6f4", "#d6e6cf")), g.fillRect(x0, y0, x1 - x0, y1 - y0));
+      g.fillStyle = "#7fae62";
+      for (let i = 0; i < 5; i++) (g.beginPath(), g.arc(x0 + 14 + i * 38, y0 + 62 - (i % 2) * 10, 26, 0, Math.PI * 2), g.fill());
+      ((g.fillStyle = "#5c8d49"), g.fillRect(x0, y0 + 78, x1 - x0, 22), (g.fillStyle = "#c9c6b9"), g.fillRect(x0, y0 + 100, x1 - x0, y1 - y0 - 100));
+      // 天花板、兩側牆、地板（越往裡面越暗）
+      quad([[0, 0], [W, 0], [x1, y0], [x0, y0]], grad(0, 0, 0, y0, "#b9bcb8", "#8f9390"));
+      quad([[0, 0], [x0, y0], [x0, y1], [0, H]], grad(0, 0, x0, 0, "#cfcdc4", "#9d9c95"));
+      quad([[W, 0], [x1, y0], [x1, y1], [W, H]], grad(W, 0, x1, 0, "#cfcdc4", "#9d9c95"));
+      quad([[0, H], [W, H], [x1, y1], [x0, y1]], grad(0, H, 0, y1, "#a7a8a2", "#bfc0b8"));
+      // 牆腳深色腰帶
+      quad([[0, H * 0.72], [x0, y0 + (y1 - y0) * 0.72], [x0, y1], [0, H]], "rgba(58,80,82,0.85)");
+      quad([[W, H * 0.72], [x1, y0 + (y1 - y0) * 0.72], [x1, y1], [W, H]], "rgba(58,80,82,0.85)");
+      // 天花板橫樑、地板磚縫
+      ((g.strokeStyle = "rgba(60,64,66,0.45)"), (g.lineWidth = 2));
+      for (let k of [0.3, 0.58, 0.8]) {
+        let xa = x0 * k,
+          ya = y0 * k,
+          yb = H - (H - y1) * k;
+        (g.beginPath(), g.moveTo(xa, ya), g.lineTo(W - xa, ya), g.stroke());
+        ((g.globalAlpha = 0.5), g.beginPath(), g.moveTo(xa, yb), g.lineTo(W - xa, yb), g.stroke(), (g.globalAlpha = 1));
+      }
+      for (let k = 1; k < 4; k++) (g.beginPath(), (g.globalAlpha = 0.35), g.moveTo((W * k) / 4, H), g.lineTo(x0 + ((x1 - x0) * k) / 4, y1), g.stroke(), (g.globalAlpha = 1));
+      // 盡頭的光灑在地板上
+      quad([[x0, y1], [x1, y1], [x1 + 46, H], [x0 - 46, H]], grad(0, y1, 0, H, "rgba(255,255,245,0.38)", "rgba(255,255,245,0)"));
+      ((g.strokeStyle = "rgba(70,74,76,0.7)"), (g.lineWidth = 3), g.strokeRect(x0, y0, x1 - x0, y1 - y0));
+    });
   // 冷氣室外機（一次畫完，省效能）
   function rsAcUnits(G, list) {
     let im = new ui(new Ze(0.85, 0.6, 0.32), Te(15592422), list.length),
@@ -32393,10 +32689,8 @@ normal = normalize( vNormal );`,
     for (let i = 0; i <= 12; i++) G.add(Fe(_e(0.5, H, 0.5, gm, s.x - W / 2 + (i * W) / 12, H / 2, front - 0.3), 0.8));
     // 穿堂：暗色開口，盡頭有光
     let p = gt.passage,
-      dark = new ne(new Qe(p.w, fl - 0.4), new nt({ color: 3026992 }));
+      dark = new ne(new Qe(p.w, fl - 0.4), new nt({ map: rsPassageTex() }));
     (dark.position.set(p.x, (fl - 0.4) / 2, front - 2.58), G.add(dark));
-    let far = new ne(new Qe(p.w * 0.5, fl * 0.5), new nt({ color: 14149608 }));
-    (far.position.set(p.x, fl * 0.27, front - 2.57), G.add(far));
     let ac = [];
     for (let i = 0; i < 12; i++)
       for (let k = 0; k < 3; k++) {
@@ -32526,7 +32820,7 @@ normal = normalize( vNormal );`,
       (win.position.set(wx, wx === ex + 2.2 ? 2.6 : 1.9, front + 0.04), B.add(win));
     }
     let sign = Bh("體育器材室", 0.28, { size: 54, bg: "#1f5fae", color: "#ffffff", radius: 4 });
-    (sign.position.set(ex + 3.75, 2.3, front + 0.06), B.add(sign));
+    (sign.position.set(ex + 2.2, 2.3, front + 0.06), B.add(sign));
     let lbl = Bh("器材室", 0.5, { size: 72, bg: "#ffffff", color: "#2b2a26", border: "#2f5419", radius: 10 });
     (lbl.position.set(ex, 3.2, front + 1.25), B.add(lbl));
     // 北側（球場那面）：走廊樓板、實心磁磚欄杆、方柱與通高圓柱、樓梯間金屬欄杆
@@ -33477,7 +33771,7 @@ normal = normalize( vNormal );`,
       G = new Re(),
       dk = Te(16777215, { map: rsRep(rsDeckTex(), 2, 2) });
     (G.add(Fe(_e(t.w, 0.25, t.d, dk, t.x, 0.125, t.z), 0.8)), G.add(Fe(_e(t.w - 1.6, 0.25, t.d - 1.6, dk, t.x, 0.375, t.z), 0.8)));
-    G.add(Fe(_e(1.9, 1.0, 1.9, Te(7031352), t.x, 0.95, t.z), 0.9, !0));
+    G.add(Fe(_e(1.9, 1.0, 1.9, Te(11043938), t.x, 0.95, t.z), 0.9, !0));
     let tree = xf(5, 1.55);
     return (tree.position.set(t.x, 0.4, t.z), G.add(tree), G);
   }
@@ -33588,7 +33882,7 @@ normal = normalize( vNormal );`,
     for (let oz of [-r.d / 2, r.d / 2]) G.add(_e(0.2, 2.6, 0.2, post, r.x - r.w / 2, 1.3, r.z + oz));
     (G.add(_e(r.w, 2.2, 0.1, plank, r.x, 1.1, r.z - r.d / 2)), G.add(_e(0.1, 2.2, r.d, plank, r.x + r.w / 2, 1.1, r.z)));
     G.add(Fe(_e(r.w + 0.8, 0.18, r.d + 0.8, Te(9121586), r.x, 2.7, r.z), 1, !0));
-    for (let ox of [-2.2, -0.8]) G.add(Fe(_e(1.2, 1.25, 1.0, Te(3828032), r.x + ox, 0.68, r.z), 0.8));
+    for (let ox of [-2.2, -0.8]) G.add(Fe(_e(1.2, 1.25, 1.0, Te(5020244), r.x + ox, 0.68, r.z), 0.8));
     let sign = Bh("資源回收室", 0.36, { size: 56, bg: "#ffffff", color: "#1f4e86", radius: 4 });
     return (sign.position.set(r.x + r.w * 0.2, 2.25, r.z + r.d / 2 + 0.05), G.add(sign), G);
   }
@@ -33793,7 +34087,8 @@ normal = normalize( vNormal );`,
 
   // ===================== v2.1.2：旗桿上的中華民國國旗（青天白日滿地紅），隨風飄動 =====================
   // 比例 3：2；左上角藍色區塊占寬、高各一半，中間白日＋12 道光芒。
-  var RS_FLAG = null;
+  var RS_FLAG = null,
+    RS_FLAGS = [];
   var rsRocFlagTex = () =>
     rsTex("rsRocFlag", 600, 400, (g, W, H) => {
       ((g.fillStyle = "#fe0000"), g.fillRect(0, 0, W, H));
@@ -33812,26 +34107,37 @@ normal = normalize( vNormal );`,
       (g.beginPath(), g.arc(cx, cy, (R * 17) / 30, 0, Math.PI * 2), (g.fillStyle = "#000095"), g.fill());
       (g.beginPath(), g.arc(cx, cy, (R * 15) / 30, 0, Math.PI * 2), (g.fillStyle = "#ffffff"), g.fill());
     });
-  function rsFlagBuild(parent, S) {
-    let W = 1.8,
-      H = 1.2,
-      geo = new Qe(W, H, 30, 10);
+  // v3.1.0：校旗（集滿任務後出現的裝飾）掛在國旗下方、小一號，不再和國旗疊在同一個位置
+  var rsSchoolFlagTex = () =>
+    rsTex("rsSchoolFlag", 300, 200, (g, W, H) => {
+      ((g.fillStyle = "#2f8a4a"), g.fillRect(0, 0, W, H));
+      ((g.fillStyle = "#256f3b"), g.fillRect(0, 0, W, 10), g.fillRect(0, H - 10, W, 10));
+      (g.beginPath(), g.arc(W / 2, H / 2, H * 0.3, 0, Math.PI * 2), (g.fillStyle = "#ffffff"), g.fill());
+      (g.beginPath(), g.arc(W / 2, H / 2, H * 0.3, 0, Math.PI * 2), (g.strokeStyle = "#f2c230"), (g.lineWidth = 6), g.stroke());
+    });
+  function rsFlagMake(parent, tex, W, H, x, y, z, ph) {
+    let geo = new Qe(W, H, Math.round((30 * W) / 1.8), 10);
     geo.translate(W / 2, 0, 0); // 旗面從旗桿往外（+x，遠離司令臺）
-    let tex = rsRocFlagTex();
     tex.wrapS = tex.wrapT = 1001; // ClampToEdge
     let m = new ne(geo, Te(16777215, { map: tex, side: _t }));
-    (m.position.set(S.x + 0.07, S.h - 0.25 - H / 2, S.z), (m.castShadow = !0), (m.frustumCulled = !1), parent.add(m));
-    let base = Float32Array.from(geo.attributes.position.array);
-    RS_FLAG = { m, geo, base, W, last: -1 };
-    rsFlagTick(0, !1);
-    return m;
+    (m.position.set(x, y, z), (m.castShadow = !0), (m.frustumCulled = !1), parent.add(m));
+    let F = { m, geo, base: Float32Array.from(geo.attributes.position.array), W, last: -1, ph: ph || 0 };
+    (RS_FLAGS.push(F), rsFlagWave(F, 0));
+    return F;
+  }
+  function rsFlagBuild(parent, S) {
+    RS_FLAGS = [];
+    RS_FLAG = rsFlagMake(parent, rsRocFlagTex(), 1.8, 1.2, S.x + 0.07, S.h - 0.25 - 0.6, S.z, 0);
+    return RS_FLAG.m;
   }
   function rsFlagTick(t, reduced) {
-    let F = RS_FLAG;
-    if (!F || !F.m.parent) return;
     if (reduced) t = 0.6; // 減少動態效果：停在一個自然的波浪形狀
+    for (let F of RS_FLAGS) F.m.parent && F.m.parent.visible && rsFlagWave(F, t);
+  }
+  function rsFlagWave(F, t) {
     if (t === F.last) return;
     F.last = t;
+    t += F.ph;
     let P = F.geo.attributes.position,
       a = P.array,
       b = F.base,
@@ -34329,6 +34635,16 @@ normal = normalize( vNormal );`,
         }),
         u.bottom.append(T("div", { class: "play-acts" }, tog, rst)),
         this.tipNow());
+      // v3.2.0：自由活動時可以按「挑戰：投 10 球」，投完算比和比值
+      if (this.app.free) {
+        let ch = T("button", { type: "button", class: "btn primary", id: "play-chal" }, "挑戰：投 10 球");
+        ((ch.onclick = () => {
+          if (this.chal || this.state !== "hold") return;
+          ((this.chal = !0), (this.made = 0), (this.shots = 0), (ch.style.display = "none"), this.app.playTip("挑戰開始！投 10 球，看進幾球。"));
+        }),
+          (this.chalBtn = ch),
+          u.bottom.querySelector(".play-acts").prepend(ch));
+      }
       let L = u.layer,
         vd = (dx, dy) => {
           ((this.vy -= dx * 0.008 * RS_HOOP_X()), (this.vh = Math.max(1.0, Math.min(8, this.vh + dy * 0.02 * rsDragDir().y))));
@@ -34406,11 +34722,11 @@ normal = normalize( vNormal );`,
       });
     }
     shoot(d) {
-      ((this.state = "fly"), (this.bv = this.vel(d)), (this.ft = 0), (this.scored = !1), this.shots++, (this.throwT = 0));
+      ((this.state = "fly"), (this.bv = this.vel(d)), (this.ft = 0), (this.acc = 0), (this.scored = !1), this.shots++, (this.throwT = 0));
       this.app.playTip("看球……");
     }
     onKey(e, down) {
-      down && e.key === " " && this.state === "hold" && (e.preventDefault(), this.shoot({ p: 0.44, a: 0 }));
+      down && e.key === " " && this.state === "hold" && !Mi() && (e.preventDefault(), this.shoot({ p: 0.44, a: 0 }));
     }
     step(h) {
       let p = this.ball.position,
@@ -34420,7 +34736,8 @@ normal = normalize( vNormal );`,
         B = this.tg.board,
         dir = this.tg.dir,
         py = p.y;
-      ((v.y -= 9.8 * h), p.addScaledVector(v, h));
+      // v3.2.0：位置用「等加速度」的正確算式（原本先減速度再移動，每一步都會少飛一點，畫面越慢誤差越大）
+      (p.addScaledVector(v, h), (p.y -= 4.9 * h * h), (v.y -= 9.8 * h));
       // 籃框（圓環）碰撞
       let ox = p.x - r.x,
         oz = p.z - r.z,
@@ -34446,6 +34763,16 @@ normal = normalize( vNormal );`,
       // 地面
       p.y < rb && ((p.y = rb), (v.y = Math.abs(v.y) > 0.6 ? -v.y * 0.6 : 0), (v.x *= 0.82), (v.z *= 0.82));
     }
+    // v3.2.0：挑戰投滿 10 球 → 出數學小題（進球數：投球數、比值）
+    chalCheck() {
+      if (!this.chal || this.shots < 10) return;
+      let made = this.made;
+      ((this.chal = !1), (this.drag = null), this.pts && this.pts.clear(), (this.look = null));
+      rsFpHoopEnd(this.app, made).then(() => {
+        this.chalBtn && ((this.chalBtn.style.display = ""), (this.chalBtn.textContent = "再挑戰一次：投 10 球"));
+        this.app.play === this && this.tipNow();
+      });
+    }
     goal() {
       ((this.scored = !0), this.made++, this.app.playTip("進了！好球！"));
       try {
@@ -34459,12 +34786,14 @@ normal = normalize( vNormal );`,
         this.drag || this.pose(0, -2.75, dt * 8);
       } else {
         ((this.ft += dt), this.pose(0, this.ft < 0.25 ? -3.0 : -0.3, dt * 10));
-        for (let i = 0; i < 6; i++) this.step(dt / 6);
+        // v3.2.0：固定每 1/240 秒算一步，不管畫面每秒幾格，球飛的路線都一樣
+        this.acc = Math.min(0.25, (this.acc || 0) + dt);
+        for (; this.acc >= 1 / 240; this.acc -= 1 / 240) this.step(1 / 240);
         this.ball.rotation.x -= dt * 8;
         let still = this.ball.position.y <= this.rb + 0.001 && Math.hypot(this.bv.x, this.bv.z) < 0.4;
-        (this.ft > 3.2 || (still && this.ft > 1)) && (this.scored || this.app.playTip("差一點！看著白色虛線，再試一次"), this.hold());
+        (this.ft > 3.2 || (still && this.ft > 1)) && (this.scored || this.app.playTip("差一點！看著白色虛線，再試一次"), this.hold(), this.chalCheck());
       }
-      this.stat.textContent = `投進 ${this.made}／${this.shots} 球`;
+      this.stat.textContent = this.chal ? `挑戰：投了 ${this.shots}／10 球，進 ${this.made} 球` : `投進 ${this.made}／${this.shots} 球`;
       let r = this.tg.rim;
       this.cam(this.camPos(), plV(r.x, 2.1, (r.z + this.spot.z) / 2), dt);
     }
@@ -35552,6 +35881,29 @@ function CharKit(T) {
       tag.position.set(chest.rx * 0.45, yE + 0.03, chest.rz * 1.02 - 0.004 + 0.002);
       body.add(tag);
     }
+    // v3.2.0：右胸徽章（自由活動換的造型，一個小圓章）
+    if (c.badge) {
+      const cv = document.createElement("canvas");
+      cv.width = cv.height = 128;
+      const g = cv.getContext("2d");
+      g.beginPath();
+      g.arc(64, 64, 60, 0, Math.PI * 2);
+      g.fillStyle = "#ffffff";
+      g.fill();
+      g.lineWidth = 8;
+      g.strokeStyle = "#f5b82e";
+      g.stroke();
+      g.font = '72px "Apple Color Emoji","Noto Color Emoji","Segoe UI Emoji",sans-serif';
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillText(c.badge, 64, 70);
+      const bt = new T.CanvasTexture(cv);
+      if ("colorSpace" in bt) bt.colorSpace = "srgb";
+      const bd = new T.Mesh(new T.CircleGeometry(0.03, 20), new T.MeshBasicMaterial({ map: bt, transparent: true }));
+      bd.position.set(-chest.rx * 0.45, H * 0.745, chest.rz * 1.02 - 0.004 + 0.004);
+      bd.userData.keep = true;
+      body.add(bd);
+    }
     // --- 短褲（綠色、側面白線） ---
     const waistY = H * 0.585;
     const shorts = mesh(
@@ -36301,7 +36653,8 @@ function CharKit(T) {
         return Math.PI * (f < 0.5 ? lerp(0.36, 0.42, f / 0.5) : lerp(0.42, 0.46, (f - 0.5) / 0.5));
       };
       // 後方開口：正後方下緣挖出半圓（讓馬尾穿出）
-      const thick = (az, pol) => 0.024 - 0.004 * (pol / Math.PI);
+      const tk = c.capKid ? 0.036 : 0.024, // 學生的頭髮比較蓬，帽子做厚一點才蓋得住
+        thick = (az, pol) => tk - 0.004 * (pol / Math.PI);
       const crown = hairShell(fn, lim, thick, col, 64, 14);
       G.add(crown);
       // 帽冠縫線（6 片）
@@ -37092,10 +37445,16 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     );
   }
   // 建立一位新造型的學生（合併網格、不再加遊戲的外框線、腳下加接觸陰影）
-  function rsKitChar(id) {
+  function rsKitChar(id, cos) {
     let kit = rsKit(),
-      def = TEACHER_DEFS[id] ? TEACHER_DEFS[id] : Object.assign({}, CHAR_DEFS[id] || CHAR_DEFS.boyA, { emblem: rsImg(RS_EMBLEM) }),
-      c = kit.build(def);
+      def = TEACHER_DEFS[id] ? TEACHER_DEFS[id] : Object.assign({}, CHAR_DEFS[id] || CHAR_DEFS.boyA, { emblem: rsImg(RS_EMBLEM) });
+    // v3.2.0：自由活動換的造型（只換鞋子顏色、加徽章、加帽子；身高、校服、臉都不動）
+    if (cos && !TEACHER_DEFS[id]) {
+      cos.shoe && (def.shoe = cos.shoe);
+      cos.badge && (def.badge = cos.badge);
+      cos.cap && ((def.acc = (def.acc || []).concat("cap")), (def.capColor = cos.cap[0]), (def.capShade = cos.cap[1]), (def.capKid = !0));
+    }
+    let c = kit.build(def);
     kit.optimize(c);
     c.traverse((o) => o.isMesh && ((o.userData.noOutline = !0), (o.userData.noRecv = !0))); // v3.0：人物不接收陰影貼圖（解析度不夠，臉和衣服會出現一塊一塊的假陰影）
     let k = new ne(new sn(0.3, 20), new nt({ color: 0, transparent: !0, opacity: 0.18, depthWrite: !1 }));
@@ -37804,6 +38163,601 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     let m = Dn(w, d, op);
     return ((m.position.x = x), (m.position.z = z), (m.userData.noMerge = !0), m);
   }
+  /* ===== v3.2.0：自由活動（完成一個小節後才開放） =====
+     1. 藏寶：操場上藏 5 張貼紙，找到收進圖鑑
+     2. 設施挑戰：投 10 球算比和比值、10 秒衝刺算速率（只記自己的最佳紀錄）
+     3. 代幣換造型：鞋子顏色、帽子、徽章（身高、校服、臉不動）
+     代幣來源只有三種：任務第一次接就答對、找到貼紙、挑戰裡的數學題答對。不排名、不和別人比。 */
+  var RS_FP_STICKERS = [
+      ["s01", "⚽", "足球"], ["s02", "🏀", "籃球"], ["s03", "🏐", "排球"], ["s04", "🏸", "羽球"],
+      ["s05", "🥇", "金牌"], ["s06", "🏆", "獎盃"], ["s07", "⭐", "星星"], ["s08", "🌈", "彩虹"],
+      ["s09", "🐶", "小狗"], ["s10", "🐱", "小貓"], ["s11", "🐰", "兔子"], ["s12", "🐢", "烏龜"],
+      ["s13", "🦖", "恐龍"], ["s14", "🤖", "機器人"], ["s15", "🌴", "王棕"], ["s16", "🌳", "大樹"],
+      ["s17", "🌼", "小花"], ["s18", "🍉", "西瓜"], ["s19", "🧃", "果汁"], ["s20", "🎒", "書包"],
+      ["s21", "✏️", "鉛筆"], ["s22", "📐", "三角板"], ["s23", "⏱️", "碼表"], ["s24", "🚩", "旗子"],
+    ],
+    // 貼紙可能出現的位置（都在可以走到的地方；每次從裡面挑 5 個，彼此至少隔 14 公尺）
+    RS_FP_SPOTS = [
+      [-50, -17.2, "涼亭"], [-58.5, -27, "涼亭"], [-61, -33.5, "器材室"], [-47, -30, "器材室"], [-30, -38, "校舍前"], [-12, -33, "校舍前"],
+      [1, -44.5, "穿堂"], [16.5, -42.5, "旗桿"], [27, -31, "加分板"], [40, -37, "垃圾回收場"], [52, -30, "西側門"], [53, -8, "西側空地"],
+      [52, 16, "西側空地"], [45, 36, "北側圍牆"], [20, 38, "北側圍牆"], [3, 31, "遊樂設施"], [-14, 30.5, "遊樂設施"], [-27, 31, "遊樂設施"],
+      [-37, 31.5, "大樹平台"], [-48, 26, "排球場"], [-62, 38, "排球場"], [-80, 39, "東側門"], [-88, 20, "籃球場"], [-80.5, 2, "籃球場"],
+      [-59, 9, "籃球場"], [-88, -18, "籃球場"], [0, 0, "草地"], [-14, 10, "草地"], [15, -9, "草地"], [0, 22.3, "跑道"], [-36, -22.3, "跑道"], [30, 0, "跑道"],
+    ],
+    RS_FP_COUNT = 5,
+    // 造型：只加東西或換顏色，不改身高、校服和臉
+    RS_FP_ITEMS = [
+      { id: "shoeR", cat: "shoe", name: "紅色球鞋", price: 8, shoe: { main: 0xe2483d, sole: 0xffffff, accent: 0xffffff, lace: 0xffffff }, sw: "#e2483d" },
+      { id: "shoeB", cat: "shoe", name: "藍色球鞋", price: 8, shoe: { main: 0x2f6fd0, sole: 0xffffff, accent: 0xffd54a, lace: 0xffffff }, sw: "#2f6fd0" },
+      { id: "shoeY", cat: "shoe", name: "黃色球鞋", price: 8, shoe: { main: 0xf5c21e, sole: 0x2b2b2b, accent: 0x2b2b2b, lace: 0xffffff }, sw: "#f5c21e" },
+      { id: "shoeP", cat: "shoe", name: "紫色球鞋", price: 8, shoe: { main: 0x8a5cd0, sole: 0xffffff, accent: 0xffffff, lace: 0xffffff }, sw: "#8a5cd0" },
+      { id: "badgeStar", cat: "badge", name: "星星徽章", price: 10, badge: "⭐" },
+      { id: "badgeBall", cat: "badge", name: "足球徽章", price: 10, badge: "⚽" },
+      { id: "badgeBolt", cat: "badge", name: "閃電徽章", price: 10, badge: "⚡" },
+      { id: "badgeHeart", cat: "badge", name: "愛心徽章", price: 10, badge: "💚" },
+      { id: "capR", cat: "cap", name: "紅色棒球帽", price: 15, cap: [0xd9433a, 0xb53229], sw: "#d9433a" },
+      { id: "capB", cat: "cap", name: "藍色棒球帽", price: 15, cap: [0x2f6fd0, 0x2455a5], sw: "#2f6fd0" },
+      { id: "capY", cat: "cap", name: "黃色棒球帽", price: 15, cap: [0xf2c230, 0xd1a31f], sw: "#f2c230" },
+      { id: "capW", cat: "cap", name: "白色棒球帽", price: 15, cap: [0xf2efe6, 0xd6d1c2], sw: "#f2efe6" },
+    ],
+    RS_FP_CATS = [
+      ["shoe", "鞋子"],
+      ["badge", "徽章"],
+      ["cap", "帽子"],
+    ],
+    RS_FP_QUIZ_CAP = 3; // 每一種挑戰，每次自由活動前 3 次的數學題有代幣（之後仍可以挑戰自己的紀錄）
+  function rsFpOn() {
+    return Ti().freeOff !== !0;
+  }
+  // ---------- 每個人物的寶物（代幣、貼紙、造型、最佳紀錄），存在人物資料裡；訪客只放在記憶體 ----------
+  function rsFpGet(code) {
+    let f = (code && zn(code).fp) || {};
+    return {
+      coins: Math.max(0, Math.floor(Number(f.coins) || 0)),
+      stickers: f.stickers && typeof f.stickers == "object" ? { ...f.stickers } : {},
+      items: Array.isArray(f.items) ? f.items.filter((x) => RS_FP_ITEMS.some((i) => i.id === x)) : [],
+      wear: f.wear && typeof f.wear == "object" ? { ...f.wear } : {},
+      bestHoop: Math.max(0, Math.floor(Number(f.bestHoop) || 0)),
+      bestDash: Math.max(0, Math.floor(Number(f.bestDash) || 0)),
+      at: Number(f.at) || 0,
+    };
+  }
+  function rsFpSave(code, f, quiet) {
+    f.at = Date.now();
+    let p = zn(code);
+    ((p.fp = f), hr(code, p));
+    quiet || rs1Enqueue("人物寶物", rsFpWalletRow(code, f));
+  }
+  function rsFpWalletRow(code, f) {
+    return {
+      人物代號: code,
+      代幣: f.coins,
+      貼紙: Object.keys(f.stickers).sort().map((k) => k + "×" + f.stickers[k]).join("、"),
+      貼紙種類數: Object.keys(f.stickers).length,
+      已買造型: f.items.join("、"),
+      穿戴中: RS_FP_CATS.map(([c]) => f.wear[c]).filter(Boolean).join("、"),
+      投籃最佳進球: f.bestHoop,
+      衝刺最佳公尺: f.bestDash,
+      更新時間: Vn(new Date(f.at).toISOString()),
+      資料: JSON.stringify({ c: f.coins, s: f.stickers, i: f.items, w: f.wear, h: f.bestHoop, d: f.bestDash, at: f.at }),
+    };
+  }
+  // 換平板：登入後從試算表讀回來的寶物比較新就採用（依更新時間）
+  function rsFpMerge(code, raw) {
+    if (!code || !raw) return !1;
+    let r = raw;
+    if (typeof r == "string")
+      try {
+        r = JSON.parse(r);
+      } catch {
+        return !1;
+      }
+    if (!r || typeof r != "object" || !(Number(r.at) > rsFpGet(code).at)) return !1;
+    let p = zn(code);
+    p.fp = { coins: Number(r.c) || 0, stickers: r.s || {}, items: Array.isArray(r.i) ? r.i : [], wear: r.w || {}, bestHoop: Number(r.h) || 0, bestDash: Number(r.d) || 0, at: Number(r.at) };
+    hr(code, p);
+    return !0;
+  }
+  function rsFpEarn(code, n, a) {
+    if (!rsFpOn() || !code || !(n > 0)) return 0;
+    let f = rsFpGet(code);
+    ((f.coins += n), rsFpSave(code, f));
+    a && a.free && ((a.free.earned += n), rsFpHudCoins(a));
+    return f.coins;
+  }
+  // 人物目前穿戴的造型 → 交給人物建模的設定
+  function rsFpCos(code) {
+    if (!rsFpOn() || !code) return null;
+    let f = rsFpGet(code),
+      c = {},
+      any = !1;
+    for (let [cat] of RS_FP_CATS) {
+      let it = RS_FP_ITEMS.find((x) => x.id === f.wear[cat] && f.items.includes(x.id));
+      if (!it) continue;
+      any = !0;
+      it.shoe && (c.shoe = it.shoe);
+      it.badge && (c.badge = it.badge);
+      it.cap && (c.cap = it.cap);
+    }
+    return any ? c : null;
+  }
+  // 任務第一次接就答對 → ＋1 代幣（不顯示在作答畫面上，結算時一起說）
+  function rsFpTaskCoin(a) {
+    let S = a && a.session,
+      rec = S && S.cur && S.cur.rec;
+    if (!rsFpOn() || !S || !S.section || !rec || rec.firstCorrect !== !0 || (rec.tryNo || 1) !== 1 || (S.cur && S.cur.guided)) return;
+    (rsFpEarn(S.code, 1), (S.fpCoins = (S.fpCoins || 0) + 1));
+  }
+
+  // ---------- 介面樣式 ----------
+  function rsFpCss() {
+    if (document.getElementById("rs-fp-css")) return;
+    let st = document.createElement("style");
+    ((st.id = "rs-fp-css"),
+      (st.textContent = [
+        ".fp-pill{display:flex;align-items:center;gap:10px;min-width:0;background:rgba(255,255,255,.95);border:2px solid #f0c94a;border-radius:999px;padding:6px 14px 6px 8px;box-shadow:var(--shadow);font-weight:700;white-space:nowrap}",
+        ".fp-pill .tag{background:#f5b82e;color:#3b2a00;border-radius:999px;padding:2px 12px;font-size:15px}.fp-pill .n{font-variant-numeric:tabular-nums}",
+        ".fp-pill{flex:none}@media (max-width:599px){.fp-pill{gap:6px;padding:6px 10px;font-size:14px}.fp-pill .tag,.fp-pill .w{display:none}.hud:has(.fp-pill){gap:5px;padding-left:8px;padding-right:8px}.hud:has(.fp-pill) .iconbtn{padding:0 9px;min-width:42px}}",
+        ".fp-pill.pop{animation:fpPop .45s ease-out}@keyframes fpPop{0%{transform:scale(1)}40%{transform:scale(1.12)}100%{transform:scale(1)}}",
+        "#overlay3d > .fp-near{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));white-space:nowrap;box-shadow:var(--shadow)}",
+        "#overlay3d > .fp-dash{position:absolute;left:50%;top:calc(70px + env(safe-area-inset-top,0px));transform:translateX(-50%);background:rgba(31,45,36,.9);color:#fff;border-radius:16px;padding:8px 20px;font-weight:700;text-align:center;pointer-events:none;min-width:230px}",
+        ".fp-dash b{display:block;font-size:34px;line-height:1.15;font-variant-numeric:tabular-nums}.fp-dash span{font-size:16px}",
+        ".fp-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin:10px 0}@media (max-width:640px){.fp-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}",
+        ".fp-st{position:relative;aspect-ratio:1;border-radius:14px;border:2px dashed var(--line-strong);background:var(--panel);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:13px;line-height:1.2;text-align:center;padding:2px}",
+        ".fp-st.has{border:2px solid #f0c94a;background:#fffbea}.fp-st .e{font-size:clamp(26px,5vmin,40px);line-height:1}.fp-st .x{position:absolute;right:4px;top:2px;font-size:12px;color:#7a5a00;font-weight:700}",
+        ".fp-shop{display:grid;grid-template-columns:minmax(0,230px) minmax(0,1fr);gap:14px;align-items:start}@media (max-width:640px),(max-height:500px){.fp-shop{grid-template-columns:minmax(0,1fr)}.fp-shop .fp-stage{display:none}}",
+        ".fp-stage{position:relative;border-radius:16px;background:linear-gradient(#e6f3fb,#eef6e4);overflow:hidden;height:min(52vh,360px)}.fp-stage canvas{width:100%;height:100%;display:block}",
+        ".fp-list{display:flex;flex-direction:column;gap:6px;max-height:min(56vh,400px);overflow:auto;-webkit-overflow-scrolling:touch;padding-right:2px}",
+        ".fp-list h3{margin:8px 0 2px;font-size:16px}.fp-item{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:6px 8px 6px 10px;background:var(--paper)}",
+        ".fp-item.on{border:2px solid var(--grass-deep);background:var(--grass-tint)}.fp-item .sw{flex:none;width:30px;height:30px;border-radius:50%;border:2px solid rgba(0,0,0,.25);display:grid;place-items:center;font-size:19px;background:#fff}",
+        ".fp-item .nm{flex:1;min-width:0;font-weight:700}.fp-item .btn{min-height:44px;font-size:16px;padding:0 14px;white-space:nowrap}",
+        ".fp-quiz .q{font-size:var(--fs-q);line-height:1.6;margin:6px 0 10px}.fp-quiz .opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}",
+        ".fp-quiz .opts button{min-height:60px;border-radius:12px;border:2px solid var(--line-strong);background:var(--paper);font-size:var(--fs-choice);font-weight:700;cursor:pointer;font-variant-numeric:tabular-nums}",
+        ".fp-quiz .opts button.ok{border-color:var(--check);background:#e3f3e3}.fp-quiz .opts button.no{color:var(--wrong-ink);border-color:var(--line);text-decoration:line-through}",
+        ".fp-quiz .fb{min-height:3.2em;margin:10px 0 0;font-size:17px;line-height:1.55}.fp-best{background:#fff6d8;border:1px solid #f0d98c;border-radius:12px;padding:8px 12px;margin:6px 0}",
+        "@media (prefers-reduced-motion:reduce){.fp-pill.pop{animation:none}}",
+      ].join("")),
+      document.head.append(st));
+  }
+
+  // ---------- 開始、結束 ----------
+  function rsFpStart(a) {
+    let S = a.session;
+    if (!rsFpOn() || !S || !S.done || !S.section || a.free) return;
+    rsFpCss();
+    let w = a.world,
+      now = new Date();
+    a.free = {
+      code: S.code,
+      sec: S.section,
+      id: `${S.code}-自由-${Vn(now.toISOString()).replace(/[-: ]/g, "")}-${Math.floor(Math.random() * 900 + 100)}`,
+      startedAt: now.toISOString(),
+      t0: performance.now(),
+      active: 0, // 真正在畫面上的秒數（切到別的 App 不算）
+      last: performance.now(),
+      found: 0,
+      hoopN: 0,
+      dashN: 0,
+      hoopBest: 0,
+      dashBest: 0,
+      quizOK: 0,
+      quizN: 0,
+      earned: 0,
+      spent: 0,
+      spots: [],
+      dash: null,
+      marker: null,
+    };
+    (va(), a.hideBubble(), a.panel.close(), a.removeOverlay(".trays, .replay, .coach"), w.clearStation());
+    (a.setMode("explore"), w.setMode("explore"), w.resetView(!0), a.renderHud(), a.renderNav(), requestAnimationFrame(() => w.resize()));
+    (rsFpSpawn(a), rsFpMarker(a), rsFpLog(a));
+    a.toast(`自由活動開始！操場上藏了 ${RS_FP_COUNT} 張貼紙，去找找看。`, 4200);
+  }
+  function rsFpEnd(a) {
+    let F = a && a.free;
+    if (!F) return;
+    (rsFpTick(a), rsFpLog(a));
+    let w = a.world;
+    for (let s of F.spots) s.g && w.scene.remove(s.g);
+    F.marker && w.scene.remove(F.marker);
+    (a.removeOverlay(".fp-near, .fp-dash"), (a.free = null));
+  }
+  function rsFpTick(a) {
+    let F = a.free,
+      t = performance.now(),
+      d = (t - F.last) / 1e3;
+    ((F.last = t), d > 0 && d < 5 && document.visibilityState !== "hidden" && (F.active += d));
+  }
+  // 寫一列到試算表「自由活動」（同一次自由活動會更新同一列）
+  function rsFpLog(a) {
+    let F = a.free;
+    if (!F) return;
+    let f = rsFpGet(F.code);
+    rs1Enqueue("自由活動", {
+      紀錄編號: F.id,
+      日期: rs1Date(F.startedAt),
+      人物代號: F.code,
+      完成的小節: F.sec,
+      開始時間: Vn(F.startedAt),
+      停留秒數: Math.round(F.active),
+      找到貼紙數: F.found,
+      投籃挑戰次數: F.hoopN,
+      投籃最佳進球: F.hoopBest,
+      衝刺挑戰次數: F.dashN,
+      衝刺最佳公尺: F.dashBest,
+      挑戰題數: F.quizN,
+      挑戰題答對數: F.quizOK,
+      獲得代幣: F.earned,
+      花掉代幣: F.spent,
+      代幣餘額: f.coins,
+    });
+  }
+
+  // ---------- 上方工具列 ----------
+  function rsFpHud(a) {
+    let F = a.free,
+      f = rsFpGet(F.code),
+      mute = T("button", { type: "button", class: "iconbtn", id: "btn-mute", "aria-pressed": String(dr()), "aria-label": dr() ? "打開音效" : "關掉音效", html: dr() ? et.mute : et.sound }),
+      ib = (id, txt, lbl, fn) => T("button", { type: "button", class: "iconbtn", id, "aria-label": lbl, onclick: qt(fn) }, T("span", { "aria-hidden": "true" }, txt), T("span", { class: "lbl" }, lbl));
+    mute.addEventListener("click", () => {
+      (Qu(!dr()), a.renderHud());
+    });
+    let hud = T(
+      "div",
+      { class: "hud" },
+      T(
+        "div",
+        { class: "fp-pill", id: "fp-pill" },
+        T("span", { class: "tag" }, "自由活動"),
+        T("span", { id: "fp-coins", class: "n", "aria-label": `代幣 ${f.coins} 枚` }, `🪙 ${f.coins}`),
+        T("span", { id: "fp-found", class: "n" }, T("span", { class: "w" }, "貼紙 "), T("span", { "aria-hidden": "true" }, "📒"), ` ${F.found}／${RS_FP_COUNT}`),
+      ),
+      T("span", { class: "spacer" }),
+      ib("fp-hint", "🔍", "提示", () => rsFpHint(a)),
+      ib("fp-album", "📒", "圖鑑", () => rsFpAlbum(a)),
+      ib("fp-shop", "👟", "造型", () => rsFpShop(a)),
+      mute,
+      T("button", { type: "button", class: "iconbtn", id: "btn-home", onclick: qt(() => a.onHomeButton()) }, T("span", { html: et.home, style: { display: "inline-flex" } }), T("span", { class: "lbl" }, "回首頁")),
+    );
+    a.overlay.prepend(hud);
+  }
+  function rsFpHudCoins(a, pop) {
+    let F = a.free;
+    if (!F) return;
+    let c = a.overlay.querySelector("#fp-coins"),
+      n = a.overlay.querySelector("#fp-found"),
+      p = a.overlay.querySelector("#fp-pill"),
+      v = rsFpGet(F.code).coins;
+    (c && ((c.textContent = `🪙 ${v}`), c.setAttribute("aria-label", `代幣 ${v} 枚`)), n && (n.lastChild.textContent = ` ${F.found}／${RS_FP_COUNT}`));
+    pop && p && (p.classList.remove("pop"), void p.offsetWidth, p.classList.add("pop"));
+  }
+
+  // ---------- 藏寶：貼紙 ----------
+  function rsFpStickerTex(id) {
+    let s = RS_FP_STICKERS.find((x) => x[0] === id) || RS_FP_STICKERS[0];
+    return rsTex("fpSticker_" + id, 160, 160, (g, W, H) => {
+      (g.clearRect(0, 0, W, H), g.beginPath(), g.arc(W / 2, H / 2, W / 2 - 4, 0, Math.PI * 2), (g.fillStyle = "#ffffff"), g.fill());
+      ((g.lineWidth = 9), (g.strokeStyle = "#f5b82e"), g.stroke());
+      ((g.font = '92px "Apple Color Emoji","Noto Color Emoji","Segoe UI Emoji",sans-serif'), (g.textAlign = "center"), (g.textBaseline = "middle"), g.fillText(s[1], W / 2, H / 2 + 6));
+    });
+  }
+  function rsFpSpawn(a) {
+    let F = a.free,
+      w = a.world,
+      f = rsFpGet(F.code),
+      pool = RS_FP_SPOTS.map((s) => ({ s, r: Math.random() })).sort((x, y) => x.r - y.r).map((x) => x.s),
+      pick = [];
+    for (let s of pool) {
+      if (pick.length >= RS_FP_COUNT) break;
+      let p = w.nav.nearestFree(s[0], s[1]);
+      if (Math.hypot(p.x - s[0], p.z - s[1]) > 3) continue; // 被新的擺設擋住的位置跳過
+      if (Math.hypot(p.x - w.pos.x, p.z - w.pos.z) < 10) continue; // 不要一開始就在腳邊
+      if (pick.some((q) => Math.hypot(q.x - p.x, q.z - p.z) < 14)) continue;
+      pick.push({ x: p.x, z: p.z, where: s[2] });
+    }
+    // 還沒有的貼紙優先；都有了就隨機
+    let missing = RS_FP_STICKERS.map((x) => x[0]).filter((id) => !f.stickers[id]).sort(() => Math.random() - 0.5),
+      rest = RS_FP_STICKERS.map((x) => x[0]).sort(() => Math.random() - 0.5),
+      ids = missing.concat(rest.filter((id) => !missing.includes(id)));
+    F.spots = pick.map((p, i) => {
+      let id = ids[i % ids.length],
+        g = new Re(),
+        disc = new ne(new sn(0.42, 28), new nt({ map: rsFpStickerTex(id), transparent: !0, side: _t, depthWrite: !1 })),
+        ring = new ne(new Hn(0.5, 0.035, 8, 28), new nt({ color: 16103470 })),
+        glow = new ne(new sn(0.7, 24), new nt({ color: 16770920, transparent: !0, opacity: 0.35, depthWrite: !1 }));
+      ((glow.rotation.x = -Math.PI / 2), (glow.position.y = -1.05), g.add(disc, ring, glow));
+      g.traverse((o) => (o.userData.noOutline = !0));
+      (g.position.set(p.x, rsGroundY(p.x, p.z) + 1.15, p.z), w.scene.add(g));
+      return { x: p.x, z: p.z, where: p.where, id, g, got: !1, ph: Math.random() * 6, y0: g.position.y };
+    });
+  }
+  function rsFpCollect(a, s) {
+    let F = a.free,
+      f = rsFpGet(F.code),
+      def = RS_FP_STICKERS.find((x) => x[0] === s.id),
+      isNew = !f.stickers[s.id];
+    ((s.got = !0), (s.pop = 0), (f.stickers[s.id] = (f.stickers[s.id] || 0) + 1), (f.coins += 1), rsFpSave(F.code, f), F.found++, (F.earned += 1));
+    try {
+      Ri.star();
+    } catch {}
+    a.world.emote && a.world.emote("player", "cheer");
+    (rsFpHudCoins(a, !0), rsFpLog(a));
+    let left = F.spots.filter((x) => !x.got).length;
+    a.toast(`找到貼紙：${def[1]} ${def[2]}${isNew ? "（新的！）" : ""}　＋1 代幣${left ? `　還有 ${left} 張` : "　5 張都找到了！"}`, 3600);
+  }
+  function rsFpHint(a) {
+    let F = a.free,
+      w = a.world,
+      left = F.spots.filter((s) => !s.got);
+    if (!left.length) return a.toast("這次的貼紙都找到了。可以去投籃、跑道挑戰，或換造型。", 3600);
+    let n = left.sort((p, q) => Math.hypot(p.x - w.pos.x, p.z - w.pos.z) - Math.hypot(q.x - w.pos.x, q.z - w.pos.z))[0],
+      d = Math.round(Math.hypot(n.x - w.pos.x, n.z - w.pos.z));
+    a.toast(`最近的一張在「${n.where}」附近，離你大約 ${d} 公尺。`, 4200);
+  }
+
+  // ---------- 10 秒衝刺的起點牌子 ----------
+  var RS_FP_DASH_AT = { x: 1.6, z: -27.9 };
+  function rsFpMarker(a) {
+    let w = a.world,
+      g = new Re(),
+      tex = rsTex("fpDashSign", 512, 256, (c, W, H) => {
+        ((c.fillStyle = "#1f6fd1"), c.fillRect(0, 0, W, H), (c.strokeStyle = "#ffffff"), (c.lineWidth = 12), c.strokeRect(10, 10, W - 20, H - 20));
+        ((c.fillStyle = "#ffffff"), (c.textAlign = "center"), (c.textBaseline = "middle"), (c.font = '700 96px "Noto Sans TC","PingFang TC",sans-serif'), c.fillText("10 秒衝刺", W / 2, H * 0.4));
+        ((c.font = '700 50px "Noto Sans TC","PingFang TC",sans-serif'), (c.fillStyle = "#ffe27a"), c.fillText("挑戰站", W / 2, H * 0.76));
+      }),
+      board = new ne(new Qe(1.9, 0.95), new nt({ map: tex, side: _t })),
+      post = new ne(new Le(0.05, 0.05, 1.7, 8), Te(9079434)),
+      post2 = post.clone();
+    (board.position.set(0, 1.95, 0), post.position.set(-0.8, 0.85, 0), post2.position.set(0.8, 0.85, 0), g.add(board, post, post2));
+    g.traverse((o) => (o.userData.noOutline = !0));
+    (g.position.set(RS_FP_DASH_AT.x, 0, RS_FP_DASH_AT.z), w.scene.add(g), (a.free.marker = g));
+  }
+
+  // ---------- 每一格 ----------
+  function rsFpFrame(a) {
+    let F = a.free,
+      w = a.world,
+      t = performance.now() / 1e3;
+    rsFpTick(a);
+    for (let s of F.spots) {
+      if (!s.g) continue;
+      if (s.got) {
+        // 收集動畫：放大、往上、淡出
+        s.pop = s.pop || performance.now();
+        let k = Math.min(1, (performance.now() - s.pop) / 600);
+        (s.g.scale.setScalar(1 + k * 0.9), (s.g.position.y = s.y0 + 1.1 * k), s.g.children.forEach((m) => ((m.material = m.userData.own || (m.userData.own = m.material.clone())), (m.material.transparent = !0), (m.material.opacity = 1 - k))));
+        k >= 1 && (w.scene.remove(s.g), (s.g = null));
+        continue;
+      }
+      w.reduced || ((s.g.rotation.y = t * 1.4 + s.ph), (s.g.children[0].position.y = Math.sin(t * 2.2 + s.ph) * 0.08), (s.g.children[1].position.y = s.g.children[0].position.y));
+      !F.dash && !a.play && Math.hypot(s.x - w.pos.x, s.z - w.pos.z) < 1.5 && rsFpCollect(a, s);
+    }
+    // 衝刺
+    let D = F.dash;
+    if (D) {
+      let now = performance.now(),
+        el = a.overlay.querySelector(".fp-dash");
+      if (D.phase === "count") {
+        let left = 3 - (now - D.t0) / 1e3;
+        if (left <= 0) ((D.phase = "run"), (D.t0 = now), (D.dist = 0), (D.px = w.pos.x), (D.pz = w.pos.z));
+        else el && (el.innerHTML = `<span>預備……</span><b>${Math.ceil(left)}</b>`);
+      } else if (D.phase === "run") {
+        let step = Math.hypot(w.pos.x - D.px, w.pos.z - D.pz);
+        (step < 3 && (D.dist += step), (D.px = w.pos.x), (D.pz = w.pos.z));
+        let left = 10 - (now - D.t0) / 1e3;
+        if (left <= 0) return rsFpDashEnd(a);
+        el && (el.innerHTML = `<span>已經跑了 ${Math.floor(D.dist)} 公尺</span><b>剩 ${left.toFixed(1)} 秒</b>`);
+      }
+    }
+    // 走到挑戰站附近：出現按鈕
+    let near = !F.dash && !a.play && !Mi() && Math.hypot(w.pos.x - RS_FP_DASH_AT.x, w.pos.z - (RS_FP_DASH_AT.z + 1.6)) < 3.4,
+      btn = a.overlay.querySelector(".fp-near");
+    near && !btn
+      ? a.overlay.append(T("button", { type: "button", class: "btn primary fp-near", id: "fp-dash-go", onclick: qt(() => rsFpDashStart(a)) }, "▶ 10 秒衝刺挑戰"))
+      : !near && btn && btn.remove();
+  }
+
+  // ---------- 數學小題（挑戰結束後）：答對 ＋1 代幣，答錯只說明、不扣 ----------
+  // steps：[{ q, options: [{ t, ok }], explain }]；回傳答對幾步
+  function rsFpQuiz(a, title, intro, steps, pay) {
+    return new Promise((done) => {
+      rsFpCss();
+      let i = 0,
+        ok = 0,
+        body = T("div", { class: "fp-quiz" }),
+        dlg,
+        render = () => {
+          let st = steps[i],
+            fb = T("p", { class: "fb", role: "status", id: "fp-quiz-fb" }),
+            nx = T("button", { type: "button", class: "btn primary", id: "fp-quiz-next", style: { display: "none", width: "100%", marginTop: "8px" } }, i + 1 < steps.length ? "下一步" : "完成"),
+            opts = T("div", { class: "opts" }),
+            answered = !1;
+          st.options.forEach((o, k) => {
+            let b = T("button", { type: "button", class: "fp-opt", "data-ok": o.ok ? "1" : "0", "data-k": String(k) }, o.t);
+            b.addEventListener("click", () => {
+              if (answered) return;
+              answered = !0;
+              [...opts.children].forEach((x) => ((x.disabled = !0), x.dataset.ok === "1" ? x.classList.add("ok") : x === b && x.classList.add("no")));
+              if (o.ok) {
+                ok++;
+                pay && rsFpEarn(a.free.code, 1, a);
+                try {
+                  Ri.correct();
+                } catch {}
+                fb.textContent = "答對了！" + (pay ? "＋1 代幣。" : "") + st.explain;
+              } else {
+                try {
+                  Ri.soft();
+                } catch {}
+                fb.textContent = "再看一次：" + st.explain;
+              }
+              ((nx.style.display = ""), nx.focus());
+            });
+            opts.append(b);
+          });
+          nx.addEventListener("click", () => {
+            i++;
+            i < steps.length ? render() : (dlg.close(), done(ok));
+          });
+          (Xt(body), body.append(T("h2", {}, title), intro ? T("div", { class: "fp-best", id: "fp-quiz-intro" }, intro) : null, T("p", { class: "stepper" }, `第 ${i + 1} 步／共 ${steps.length} 步`), T("p", { class: "q", id: "fp-quiz-q" }, st.q), opts, fb, nx));
+        };
+      (render(), (dlg = Qn(body, { label: title })));
+    });
+  }
+  // 把選項整理成 4 個不重複的（第一個是正確答案），再打亂
+  function rsFpOpts(right, wrongs, pool) {
+    let seen = new Set([right]),
+      out = [{ t: right, ok: !0 }];
+    for (let x of wrongs.concat(pool)) {
+      if (out.length >= 4) break;
+      seen.has(x) || (seen.add(x), out.push({ t: x, ok: !1 }));
+    }
+    return out.sort(() => Math.random() - 0.5);
+  }
+  var rsFpNum = (v) => String(Math.round(v * 100) / 100);
+
+  // ---------- 10 秒衝刺 ----------
+  function rsFpDashStart(a) {
+    let F = a.free,
+      w = a.world;
+    if (F.dash || a.play) return;
+    (a.removeOverlay(".fp-near, .fp-dash"), (F.dash = { phase: "count", t0: performance.now(), dist: 0, px: w.pos.x, pz: w.pos.z }));
+    a.overlay.append(T("div", { class: "fp-dash", role: "status" }));
+    a.toast("數到 3 之後開始跑，10 秒內跑越遠越好！（可以按「跑」或把搖桿推到底）", 3200);
+  }
+  async function rsFpDashEnd(a) {
+    let F = a.free,
+      w = a.world,
+      D = F.dash,
+      m = Math.max(1, Math.round(D.dist)),
+      f = rsFpGet(F.code),
+      isBest = m > f.bestDash;
+    ((F.dash = null), a.removeOverlay(".fp-dash"), w.stop(), a.pointer.reset(), a.keys.clear());
+    (F.dashN++, (F.dashBest = Math.max(F.dashBest, m)), isBest && ((f.bestDash = m), rsFpSave(F.code, f)));
+    let pay = F.dashN <= RS_FP_QUIZ_CAP,
+      v = m / 10,
+      intro = `10 秒跑了 ${m} 公尺。` + (isBest ? "這是你的新紀錄！" : `你的最佳紀錄是 ${f.bestDash} 公尺。`) + (pay ? "" : "（這次自由活動的衝刺代幣已經拿完，還是可以挑戰自己的紀錄。）"),
+      steps = [
+        {
+          q: `你 10 秒跑了 ${m} 公尺。速率是每秒幾公尺？`,
+          options: rsFpOpts(rsFpNum(v), [rsFpNum(m * 10), rsFpNum(m), rsFpNum(m / 100)], [rsFpNum(m + 10), rsFpNum(m - 10 > 0 ? m - 10 : m + 20)]).map((o) => ({ t: `每秒 ${o.t} 公尺`, ok: o.ok })),
+          explain: `速率＝距離÷時間＝${m}÷10＝${rsFpNum(v)}，每秒 ${rsFpNum(v)} 公尺。`,
+        },
+        {
+          q: `照每秒 ${rsFpNum(v)} 公尺的速率，跑 20 秒可以跑幾公尺？`,
+          options: rsFpOpts(rsFpNum(m * 2), [rsFpNum(m + 20), rsFpNum(m / 2), rsFpNum(m * 20)], [rsFpNum(m * 2 + 10), rsFpNum(m + 2)]).map((o) => ({ t: `${o.t} 公尺`, ok: o.ok })),
+          explain: `距離＝速率×時間＝${rsFpNum(v)}×20＝${rsFpNum(m * 2)} 公尺。`,
+        },
+      ],
+      ok = await rsFpQuiz(a, "10 秒衝刺：算算看", intro, steps, pay);
+    if (!a.free) return;
+    ((F.quizN += steps.length), (F.quizOK += ok), rsFpLog(a), a.renderHud());
+  }
+  // ---------- 投 10 球（在投籃小遊戲裡按「挑戰：投 10 球」開始；投完由這裡出題） ----------
+  async function rsFpHoopEnd(a, made) {
+    let F = a.free;
+    if (!F) return;
+    let f = rsFpGet(F.code),
+      isBest = made > f.bestHoop;
+    (F.hoopN++, (F.hoopBest = Math.max(F.hoopBest, made)), isBest && ((f.bestHoop = made), rsFpSave(F.code, f)));
+    let pay = F.hoopN <= RS_FP_QUIZ_CAP,
+      miss = 10 - made,
+      intro = `投 10 球，進了 ${made} 球。` + (isBest ? "這是你的新紀錄！" : `你的最佳紀錄是 10 球進 ${f.bestHoop} 球。`) + (pay ? "" : "（這次自由活動的投籃代幣已經拿完，還是可以挑戰自己的紀錄。）"),
+      R = (x, y) => `${x}：${y}`,
+      steps = [
+        {
+          q: `你投了 10 球，進了 ${made} 球。「進球數」對「投球數」的比，要怎麼記？`,
+          options: rsFpOpts(R(made, 10), [R(10, made), R(made, miss), R(miss, 10)], [R(10, miss), R(made + 1, 10), R(10, 10), R(made, 20)]),
+          explain: `前項是進球數 ${made}，後項是投球數 10，記作 ${R(made, 10)}。`,
+        },
+        {
+          q: `${R(made, 10)} 的比值是多少？`,
+          options: rsFpOpts(rsFpNum(made / 10), [rsFpNum(made), rsFpNum(made * 10), rsFpNum(miss / 10)], ["10", "1", "0.1", "0.01", "100"]),
+          explain: `比值＝前項÷後項＝${made}÷10＝${rsFpNum(made / 10)}。`,
+        },
+      ],
+      ok = await rsFpQuiz(a, "投 10 球：算算看", intro, steps, pay);
+    if (!a.free) return;
+    ((F.quizN += steps.length), (F.quizOK += ok), rsFpLog(a));
+  }
+
+  // ---------- 圖鑑 ----------
+  function rsFpAlbum(a) {
+    rsFpCss();
+    let f = rsFpGet(a.free.code),
+      have = Object.keys(f.stickers).length,
+      grid = T("div", { class: "fp-grid", id: "fp-album-grid" });
+    for (let [id, e, name] of RS_FP_STICKERS) {
+      let n = f.stickers[id] || 0;
+      grid.append(
+        T("div", { class: "fp-st" + (n ? " has" : ""), "data-id": id, "aria-label": n ? `${name}，${n} 張` : "還沒找到" }, T("span", { class: "e", "aria-hidden": "true" }, n ? e : "？"), T("span", {}, n ? name : "還沒找到"), n > 1 ? T("span", { class: "x" }, `×${n}`) : null),
+      );
+    }
+    let dlg,
+      body = T("div", {}, T("h2", {}, "貼紙圖鑑"), T("p", { id: "fp-album-count" }, `已經收集 ${have}／${RS_FP_STICKERS.length} 種。每完成一個小節，操場上會再藏 ${RS_FP_COUNT} 張。`), grid, T("div", { class: "row" }, T("button", { type: "button", class: "btn primary", id: "fp-album-close", "data-autofocus": !0, onclick: () => dlg.close() }, "關閉")));
+    dlg = Qn(body, { wide: !0, label: "貼紙圖鑑" });
+  }
+
+  // ---------- 換造型 ----------
+  function rsFpShop(a) {
+    rsFpCss();
+    let F = a.free,
+      w = a.world,
+      av = Ai.find((x) => x.id === (a.session && a.session.attempt && a.session.attempt.avatar)) || Ai[0],
+      cv = T("canvas", { "aria-hidden": "true" }),
+      stage = T("div", { class: "fp-stage" }, cv),
+      list = T("div", { class: "fp-list", id: "fp-shop-list" }),
+      coins = T("b", { id: "fp-shop-coins" }),
+      msg = T("p", { class: "err", role: "status", id: "fp-shop-msg", style: { color: "var(--grass-deeper)" } }),
+      api = null,
+      dlg,
+      apply = () => {
+        let cos = rsFpCos(F.code);
+        (w.setAvatar(av.id, cos), api && api.show(av.id, cos));
+      },
+      render = () => {
+        let f = rsFpGet(F.code);
+        ((coins.textContent = `🪙 ${f.coins} 枚代幣`), Xt(list));
+        for (let [cat, cname] of RS_FP_CATS) {
+          list.append(T("h3", {}, cname));
+          for (let it of RS_FP_ITEMS.filter((x) => x.cat === cat)) {
+            let own = f.items.includes(it.id),
+              on = own && f.wear[cat] === it.id,
+              b = T("button", { type: "button", class: "btn" + (own && !on ? " primary" : ""), "data-item": it.id, "data-act": own ? (on ? "off" : "on") : "buy" }, own ? (on ? "脫下" : "穿上") : `買（${it.price} 枚）`);
+            !own && f.coins < it.price && ((b.setAttribute("aria-disabled", "true"), (b.dataset.act = "poor")));
+            b.addEventListener("click", () => {
+              let g = rsFpGet(F.code);
+              if (b.dataset.act === "poor") return void (msg.textContent = `代幣不夠，還差 ${it.price - g.coins} 枚。任務一次就答對、找貼紙、挑戰題答對都可以拿到代幣。`);
+              if (b.dataset.act === "buy") {
+                if (g.coins < it.price) return;
+                ((g.coins -= it.price), g.items.push(it.id), (g.wear[cat] = it.id), (F.spent += it.price), (msg.textContent = `買了「${it.name}」，已經穿上。`));
+              } else if (b.dataset.act === "on") ((g.wear[cat] = it.id), (msg.textContent = `穿上「${it.name}」。`));
+              else (delete g.wear[cat], (msg.textContent = `脫下「${it.name}」。`));
+              (rsFpSave(F.code, g), rsFpLog(a), render(), apply(), rsFpHudCoins(a));
+            });
+            list.append(T("div", { class: "fp-item" + (on ? " on" : ""), "data-id": it.id }, T("span", { class: "sw", style: it.sw ? { background: it.sw } : null, "aria-hidden": "true" }, it.badge || ""), T("span", { class: "nm" }, it.name), b));
+          }
+        }
+      },
+      body = T(
+        "div",
+        {},
+        T("h2", {}, "換造型"),
+        T("p", {}, coins, "　買過的可以隨時穿上或脫下。"),
+        T("div", { class: "fp-shop" }, stage, list),
+        msg,
+        T("div", { class: "row" }, T("button", { type: "button", class: "btn primary", id: "fp-shop-close", "data-autofocus": !0, onclick: () => (api && api.dispose(), dlg.close()) }, "關閉")),
+      );
+    (render(), (dlg = Qn(body, { wide: !0, label: "換造型" })));
+    try {
+      ((api = w.avatarStage ? w.avatarStage(cv) : null), api && api.show(av.id, rsFpCos(F.code)));
+    } catch {
+      api = null;
+    }
+    api || (stage.style.display = "none");
+  }
+  window.__fpHoop = rsFpHoopEnd; // 測試用
+  window.__rsFp = { get: rsFpGet, save: rsFpSave, items: RS_FP_ITEMS, stickers: RS_FP_STICKERS, spots: RS_FP_SPOTS, cos: rsFpCos, merge: rsFpMerge, dashAt: RS_FP_DASH_AT, start: rsFpStart, end: rsFpEnd, taskCoin: rsFpTaskCoin, on: rsFpOn }; // 測試用
   // ===== v0.8.5：人物配件（眼鏡、背包、玩偶、計算機、斜背水壺、助聽器、頸掛風扇、鉛筆） =====
   function avAccessories(s, n, r, m, A, R) {
     let has = (k) => (s.acc || []).includes(k),
@@ -37906,7 +38860,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     }
   }
   function ic(s, e = {}) {
-    if (s.kit) return rsKitChar(s.kit);
+    if (s.kit) return rsKitChar(s.kit, e.cos);
     let t = !!s.adult,
       uni = !t && s.uniform !== !1,
       n = t ? 1.18 : 1,
@@ -38176,10 +39130,8 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     switch (s) {
       case "flag": {
         let t = gt.flagpole,
-          n = new ne(new Qe(1.8, 1.2), Dt(3115594, { side: _t }));
-        n.position.set(0.95, t.h - 0.8, 0);
-        let i = new ne(new sn(0.32, 20), Dt(16777215, { side: _t }));
-        (i.position.set(0.95, t.h - 0.8, 0.01), e.add(n, i));
+          F = rsFlagMake(e, rsSchoolFlagTex(), 1.35, 0.9, 0.07, t.h - 1.6 - 0.45, 0, 1.3);
+        F.m.userData.noOutline = !0;
         break;
       }
       case "flowers": {
@@ -38193,12 +39145,8 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
         break;
       }
       case "tree": {
-        let t = new ne(new Le(0.2, 0.28, 1.8, 7), Dt(8018492));
-        t.position.y = 0.9;
-        let n = new ne(new Ki(1.4, 1), Dt(7320394, { flatShading: !0 }));
-        n.position.y = 2.6;
-        let i = new ne(new dt(0.18, 8, 6), Dt(15290212));
-        (i.position.set(0.8, 2.4, 0.9), e.add(t, n, i));
+        // v3.1.0：小樹改用和校園其他樹一樣的樹冠（原本是一顆多面體）
+        e.add(xf(7, 0.62));
         break;
       }
       case "bench": {
@@ -38239,6 +39187,15 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
         i.position.y = 1.5;
         let r = new ne(new Ze(0.6, 0.2, 0.6), Dt(5913114));
         ((r.position.y = 1.2), e.add(n, i, r));
+        // v3.1.0：加上杯口、兩個把手和杯腳，看起來像獎盃（原本像漏斗）
+        let lip = new ne(new Hn(0.45, 0.035, 8, 24), t);
+        ((lip.rotation.x = Math.PI / 2), (lip.position.y = 2.4), e.add(lip));
+        for (let q of [-1, 1]) {
+          let hd = new ne(new Hn(0.17, 0.035, 8, 16), t);
+          (hd.position.set(q * 0.44, 2.08, 0), e.add(hd));
+        }
+        let foot = new ne(new Le(0.1, 0.24, 0.12, 12), t);
+        ((foot.position.y = 1.36), e.add(foot));
         break;
       }
     }
@@ -39274,11 +40231,11 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
           ((this.occDist = null), this.avoidOcclusion(t, 1), this.tweenCamera(t.pos, t.look, !1, prev === "home" ? 2.1 : 0.8));
         }
       }
-      setAvatar(e) {
+      setAvatar(e, cos) {
         let t = Ai.find((n) => n.id === e) || Ai[0];
         rsSwapNpcs(this, t.kit || t.id);
         (this.player && this.scene.remove(this.player),
-          (this.player = Nh(ic(t))),
+          (this.player = Nh(ic(t, { cos }))),
           this.scene.add(this.player),
           this.player.position.set(this.pos.x, rsGroundY(this.pos.x, this.pos.z), this.pos.z),
           (this.player.rotation.y = this.heading));
@@ -39595,12 +40552,14 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
         fit();
         st.raf = requestAnimationFrame(frame);
         return {
-          show(id) {
-            if (id === st.id) return;
+          show(id, cos) {
+            let key = id + (cos ? JSON.stringify(cos) : "");
+            if (key === st.key) return;
+            st.key = key;
             st.ch && sc.remove(st.ch);
             let o = Ai.find((x) => x.id === id);
             if (!o) return ((st.ch = null), (st.id = null), R.clear());
-            ((st.ch = Nh(ic(o))), (st.id = id), (st.yaw = 0.45), (st.idle = 1.2), sc.add(st.ch));
+            ((st.ch = Nh(ic(o, { cos }))), (st.yaw = st.id === id ? st.yaw : 0.45), (st.id = id), (st.idle = 1.2), sc.add(st.ch));
             let H = (st.ch.userData.rig && st.ch.userData.rig.H) || 1.5;
             (cam.position.set(0, 0.95, 3.75 * Math.max(1, H / 1.5)), cam.lookAt(0, 0.84 * Math.max(1, H / 1.5), 0), fit());
           },
