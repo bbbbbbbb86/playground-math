@@ -19,7 +19,7 @@
   var RS_MOVE = { walk: 5, run: 1.7, accel: 10, decel: 14, turn: 12, maxTurn: 14, dead: 0.12, minJoy: 0.35, stride: 1.3 };
   var ut = {
     name: "操場中的數學",
-    appVersion: "3.2.1",
+    appVersion: "3.3.0",
     teacherPassword: "8642",
     questionsPerSession: 9,
     questionsPerSessionOptions: [8, 9, 10],
@@ -9165,6 +9165,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
           (this.coachShown = !1),
           this.showCoach(),
           this.activateTask());
+        rsFpTryCheck(this); // v3.3.0：訪客名字填「試玩」→ 不用答題，直接進自由活動（給老師試玩用）
       }
       renderNav() {
         this.removeOverlay(".camctl, .camctl-part");
@@ -9414,6 +9415,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
           ),
           root = T("div", { class: "play-ui" }, fade, top, bottom);
         ((this.playEls = { layer, root, tip, fade, bottom }), this.overlay.append(layer, root), G.ui({ root, bottom, layer }), (this.play = G), (w.play = G), w.setMode("play"));
+        this.free && rsFpPlayHook(this, G); // v3.3.0：自由活動時，玩設施可能掉出貼紙
         ((this.playEsc = (e) => {
           e.key === "Escape" && this.play && !Mi() && (e.preventDefault(), this.exitPlay());
         }),
@@ -36899,6 +36901,77 @@ function CharKit(T) {
       rig.root.updateMatrixWorld(true);
       hd.attach(C);
     },
+    // v3.3.0：自由活動的配件（領巾、頭帶、手環、氣球）；背包用上面的 backpack 換顏色
+    fpScarf(rig, c) {
+      const H = rig.H,
+        G = new T.Group(),
+        m = mat(c.fpScarf),
+        ch = rig.chest,
+        y = rig.shY + 0.008,
+        pts = [];
+      // 繞著領口一圈（前面低一點）
+      for (let k = 0; k < 20; k++) {
+        const az = (k / 20) * Math.PI * 2,
+          f = (1 + Math.cos(az)) / 2;
+        pts.push(V(Math.sin(az) * ch.rx * 0.66, y - f * 0.035 + 0.012, Math.cos(az) * ch.rz * (0.82 + f * 0.34)));
+      }
+      G.add(new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts, true), 40, 0.013, 6, true), m));
+      // 胸前的三角巾角
+      const tri = new T.Mesh(new T.CylinderGeometry(0.003, 0.075, 0.1, 4, 1, false, Math.PI / 4), m);
+      tri.rotation.set(0, 0, Math.PI);
+      tri.scale.set(1, 1, 0.22);
+      tri.position.set(0, y - 0.075, ch.rz * 1.12);
+      G.add(tri);
+      const knot = new T.Mesh(new T.SphereGeometry(0.014, 10, 8), m);
+      knot.position.set(0, y - 0.024, ch.rz * 1.16);
+      G.add(knot);
+      G.userData.acc = "fpScarf";
+      rig.body.add(G);
+    },
+    fpHband(rig, c) {
+      const head = rig.head,
+        fn = head.userData.fn,
+        pts = [],
+        pol = Math.PI * 0.37;
+      for (let k = 0; k < 32; k++) {
+        const az = (k / 32) * Math.PI * 2,
+          q = fn(V(Math.sin(pol) * Math.sin(az), Math.cos(pol), Math.sin(pol) * Math.cos(az)));
+        pts.push(q.addScaledVector(q.clone().normalize(), 0.02));
+      }
+      const G = new T.Group();
+      G.add(new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts, true), 64, 0.013, 6, true), mat(c.fpHband)));
+      G.userData.acc = "fpHband";
+      head.add(G);
+    },
+    fpWrist(rig, c) {
+      const E = rig.fores[0],
+        wr = rig.H * 0.016 * (c.bulk || 1) * Math.sqrt(c.armW || 1),
+        faL = rig.H * 0.155,
+        W = new T.Group(),
+        band = new T.Mesh(new T.TorusGeometry(wr * 1.12, 0.009, 6, 20), mat(c.fpWrist));
+      band.rotation.x = Math.PI / 2;
+      band.scale.set(1, 0.85, 2.4);
+      W.add(band);
+      W.position.y = -faL + 0.035;
+      W.userData.acc = "fpWrist";
+      E.add(W);
+    },
+    fpBalloon(rig, c) {
+      const H = rig.H,
+        G = new T.Group(),
+        base = V(-rig.chest.rx * 0.75, rig.waistY + 0.02, -rig.chest.rz * 0.95),
+        top = V(-0.36, H - 0.12, -0.22);
+      G.add(new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3([base, V(-0.3, H * 0.74, -0.26), top]), 16, 0.0035, 4, false), mat(0x8a8a8a)));
+      const ball = new T.Mesh(new T.SphereGeometry(0.115, 18, 14), mat(c.fpBalloon));
+      ball.scale.set(1, 1.2, 1);
+      ball.position.copy(top).add(V(0, 0.13, 0));
+      G.add(ball);
+      const knot = new T.Mesh(new T.CylinderGeometry(0.004, 0.016, 0.022, 8), mat(c.fpBalloon));
+      knot.position.copy(top).add(V(0, -0.004, 0));
+      G.add(knot);
+      G.userData.acc = "fpBalloon";
+      rig.body.add(G);
+    },
     // 握在手裡：把物件放在身體座標的握點，再掛到手上（之後手動，物件跟著動）
     _grip(rig, k, obj, off) {
       const hd = rig.hands[k],
@@ -36992,8 +37065,8 @@ function CharKit(T) {
     // 男生 2：粉紅色雙肩書包
     backpack(rig, c) {
       const H = rig.H,
-        pink = mat(0xea9aa8),
-        dark = mat(0xc9707f),
+        pink = mat(c.bagColor || 0xea9aa8),
+        dark = mat(c.bagShade || 0xc9707f),
         B = new T.Group(),
         bw = 0.28,
         bh = 0.36,
@@ -37453,6 +37526,12 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       cos.shoe && (def.shoe = cos.shoe);
       cos.badge && (def.badge = cos.badge);
       cos.cap && ((def.acc = (def.acc || []).concat("cap")), (def.capColor = cos.cap[0]), (def.capShade = cos.cap[1]), (def.capKid = !0));
+      // v3.3.0：背包（原本就背書包的人物只換顏色）、領巾、頭帶、手環、氣球
+      cos.bag && ((def.acc = (def.acc || []).filter((x) => x !== "backpack").concat("backpack")), (def.bagColor = cos.bag[0]), (def.bagShade = cos.bag[1]));
+      cos.scarf && ((def.acc = (def.acc || []).concat("fpScarf")), (def.fpScarf = cos.scarf));
+      cos.hband && ((def.acc = (def.acc || []).concat("fpHband")), (def.fpHband = cos.hband));
+      cos.wrist && ((def.acc = (def.acc || []).concat("fpWrist")), (def.fpWrist = cos.wrist));
+      cos.balloon && ((def.acc = (def.acc || []).concat("fpBalloon")), (def.fpBalloon = cos.balloon));
     }
     let c = kit.build(def);
     kit.optimize(c);
@@ -38163,11 +38242,12 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     let m = Dn(w, d, op);
     return ((m.position.x = x), (m.position.z = z), (m.userData.noMerge = !0), m);
   }
-  /* ===== v3.2.0：自由活動（完成一個小節後才開放） =====
-     1. 藏寶：操場上藏 5 張貼紙，找到收進圖鑑
-     2. 設施挑戰：投 10 球算比和比值、10 秒衝刺算速率（只記自己的最佳紀錄）
-     3. 代幣換造型：鞋子顏色、帽子、徽章（身高、校服、臉不動）
-     代幣來源只有三種：任務第一次接就答對、找到貼紙、挑戰裡的數學題答對。不排名、不和別人比。 */
+  /* ===== 自由活動（完成一個小節後才開放）v3.2.0；v3.3.0 大改 =====
+     1. 藏寶：操場上藏 6 張貼紙。2 張走到就有，4 張要動手：玩設施、上司令臺、翻草叢、開回收桶、照紙條的數學線索走
+     2. 挑戰：投 10 球算比和比值；100／400 公尺賽跑（有電腦同學、名次）跑完算速率和比
+     3. 代幣換造型：鞋子、徽章、帽子、背包、領巾、頭帶、手環、氣球、腳下特效（身高、校服、臉不動）
+        造型帶一點能力，只在自由活動有效（練習時無效，作答紀錄不受影響）
+     代幣來源只有三種：任務第一次接就答對、找到貼紙、挑戰裡的數學題答對。跑贏、投進不給代幣。 */
   var RS_FP_STICKERS = [
       ["s01", "⚽", "足球"], ["s02", "🏀", "籃球"], ["s03", "🏐", "排球"], ["s04", "🏸", "羽球"],
       ["s05", "🥇", "金牌"], ["s06", "🏆", "獎盃"], ["s07", "⭐", "星星"], ["s08", "🌈", "彩虹"],
@@ -38175,8 +38255,12 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       ["s13", "🦖", "恐龍"], ["s14", "🤖", "機器人"], ["s15", "🌴", "王棕"], ["s16", "🌳", "大樹"],
       ["s17", "🌼", "小花"], ["s18", "🍉", "西瓜"], ["s19", "🧃", "果汁"], ["s20", "🎒", "書包"],
       ["s21", "✏️", "鉛筆"], ["s22", "📐", "三角板"], ["s23", "⏱️", "碼表"], ["s24", "🚩", "旗子"],
+      // v3.3.0：金色貼紙（只會出現在要動手找的地方；找到 ＋2 代幣）
+      ["g01", "👑", "皇冠", 1], ["g02", "💎", "鑽石", 1], ["g03", "🚀", "火箭", 1], ["g04", "🦄", "獨角獸", 1],
+      ["g05", "🐉", "飛龍", 1], ["g06", "🌟", "閃亮星", 1], ["g07", "🎖️", "勳章", 1], ["g08", "🔥", "火焰", 1],
+      ["g09", "🪐", "土星", 1], ["g10", "🦅", "老鷹", 1], ["g11", "🍀", "幸運草", 1], ["g12", "🎯", "靶心", 1],
     ],
-    // 貼紙可能出現的位置（都在可以走到的地方；每次從裡面挑 5 個，彼此至少隔 14 公尺）
+    // 「走到就有」的貼紙可能出現的位置（都在可以走到的地方）
     RS_FP_SPOTS = [
       [-50, -17.2, "涼亭"], [-58.5, -27, "涼亭"], [-61, -33.5, "器材室"], [-47, -30, "器材室"], [-30, -38, "校舍前"], [-12, -33, "校舍前"],
       [1, -44.5, "穿堂"], [16.5, -42.5, "旗桿"], [27, -31, "加分板"], [40, -37, "垃圾回收場"], [52, -30, "西側門"], [53, -8, "西側空地"],
@@ -38184,28 +38268,63 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       [-37, 31.5, "大樹平台"], [-48, 26, "排球場"], [-62, 38, "排球場"], [-80, 39, "東側門"], [-88, 20, "籃球場"], [-80.5, 2, "籃球場"],
       [-59, 9, "籃球場"], [-88, -18, "籃球場"], [0, 0, "草地"], [-14, 10, "草地"], [15, -9, "草地"], [0, 22.3, "跑道"], [-36, -22.3, "跑道"], [30, 0, "跑道"],
     ],
-    RS_FP_COUNT = 5,
-    // 造型：只加東西或換顏色，不改身高、校服和臉
+    // 草叢可能出現的地方（一次三叢，只有一叢有貼紙）
+    RS_FP_BUSH_AT = [
+      [52, -8, "西側空地"], [52, 14, "西側空地"], [45, 37, "北側圍牆"], [20, 38.5, "北側圍牆"], [-30, -38, "校舍前"], [-80, 39, "東側門"],
+    ],
+    RS_FP_COUNT = 6,
+    RS_FP_OPEN = 2, // 其中幾張是走到就有
+    RS_FP_RIDES = { swing: ["盪鞦韆", "盪高一點"], hoop: ["投籃", "投進一球"], slide: ["溜滑梯", "溜到底"], spin: ["玩旋轉塔", "轉快一點"] },
+    // 造型：只加東西或換顏色，不改身高、校服和臉。ab＝能力（只在自由活動有效）
     RS_FP_ITEMS = [
-      { id: "shoeR", cat: "shoe", name: "紅色球鞋", price: 8, shoe: { main: 0xe2483d, sole: 0xffffff, accent: 0xffffff, lace: 0xffffff }, sw: "#e2483d" },
-      { id: "shoeB", cat: "shoe", name: "藍色球鞋", price: 8, shoe: { main: 0x2f6fd0, sole: 0xffffff, accent: 0xffd54a, lace: 0xffffff }, sw: "#2f6fd0" },
-      { id: "shoeY", cat: "shoe", name: "黃色球鞋", price: 8, shoe: { main: 0xf5c21e, sole: 0x2b2b2b, accent: 0x2b2b2b, lace: 0xffffff }, sw: "#f5c21e" },
-      { id: "shoeP", cat: "shoe", name: "紫色球鞋", price: 8, shoe: { main: 0x8a5cd0, sole: 0xffffff, accent: 0xffffff, lace: 0xffffff }, sw: "#8a5cd0" },
-      { id: "badgeStar", cat: "badge", name: "星星徽章", price: 10, badge: "⭐" },
-      { id: "badgeBall", cat: "badge", name: "足球徽章", price: 10, badge: "⚽" },
-      { id: "badgeBolt", cat: "badge", name: "閃電徽章", price: 10, badge: "⚡" },
-      { id: "badgeHeart", cat: "badge", name: "愛心徽章", price: 10, badge: "💚" },
-      { id: "capR", cat: "cap", name: "紅色棒球帽", price: 15, cap: [0xd9433a, 0xb53229], sw: "#d9433a" },
-      { id: "capB", cat: "cap", name: "藍色棒球帽", price: 15, cap: [0x2f6fd0, 0x2455a5], sw: "#2f6fd0" },
-      { id: "capY", cat: "cap", name: "黃色棒球帽", price: 15, cap: [0xf2c230, 0xd1a31f], sw: "#f2c230" },
-      { id: "capW", cat: "cap", name: "白色棒球帽", price: 15, cap: [0xf2efe6, 0xd6d1c2], sw: "#f2efe6" },
+      { id: "shoeR", cat: "shoe", name: "紅色球鞋", price: 8, shoe: { main: 0xe2483d, sole: 0xffffff, accent: 0xffffff, lace: 0xffffff }, sw: "#e2483d", ab: { speed: 0.05 } },
+      { id: "shoeB", cat: "shoe", name: "藍色球鞋", price: 8, shoe: { main: 0x2f6fd0, sole: 0xffffff, accent: 0xffd54a, lace: 0xffffff }, sw: "#2f6fd0", ab: { speed: 0.05 } },
+      { id: "shoeY", cat: "shoe", name: "黃色球鞋", price: 8, shoe: { main: 0xf5c21e, sole: 0x2b2b2b, accent: 0x2b2b2b, lace: 0xffffff }, sw: "#f5c21e", ab: { speed: 0.05 } },
+      { id: "shoeP", cat: "shoe", name: "紫色球鞋", price: 8, shoe: { main: 0x8a5cd0, sole: 0xffffff, accent: 0xffffff, lace: 0xffffff }, sw: "#8a5cd0", ab: { speed: 0.05 } },
+      { id: "shoeG", cat: "shoe", name: "綠色閃電跑鞋", price: 18, shoe: { main: 0x27b36a, sole: 0x1c1c1c, accent: 0xffe14a, lace: 0xffe14a }, sw: "#27b36a", ab: { speed: 0.1 } },
+      { id: "shoeK", cat: "shoe", name: "金色飛毛腿跑鞋", price: 28, shoe: { main: 0xe9b923, sole: 0xffffff, accent: 0xd9433a, lace: 0xffffff }, sw: "#e9b923", ab: { speed: 0.15 } },
+      { id: "badgeStar", cat: "badge", name: "星星徽章", price: 10, badge: "⭐", ab: { start: 0.05 } },
+      { id: "badgeBall", cat: "badge", name: "足球徽章", price: 10, badge: "⚽", ab: { start: 0.05 } },
+      { id: "badgeBolt", cat: "badge", name: "閃電徽章", price: 10, badge: "⚡", ab: { start: 0.05 } },
+      { id: "badgeHeart", cat: "badge", name: "愛心徽章", price: 10, badge: "💚", ab: { start: 0.05 } },
+      { id: "badgeRocket", cat: "badge", name: "火箭徽章", price: 16, badge: "🚀", ab: { start: 0.1 } },
+      { id: "badgeCrown", cat: "badge", name: "皇冠徽章", price: 24, badge: "👑", ab: { start: 0.15 } },
+      { id: "capR", cat: "cap", name: "紅色棒球帽", price: 15, cap: [0xd9433a, 0xb53229], sw: "#d9433a", ab: { sense: 9 } },
+      { id: "capB", cat: "cap", name: "藍色棒球帽", price: 15, cap: [0x2f6fd0, 0x2455a5], sw: "#2f6fd0", ab: { sense: 9 } },
+      { id: "capY", cat: "cap", name: "黃色棒球帽", price: 15, cap: [0xf2c230, 0xd1a31f], sw: "#f2c230", ab: { sense: 9 } },
+      { id: "capW", cat: "cap", name: "白色棒球帽", price: 15, cap: [0xf2efe6, 0xd6d1c2], sw: "#f2efe6", ab: { sense: 9 } },
+      { id: "capG", cat: "cap", name: "綠色棒球帽", price: 15, cap: [0x3f9a55, 0x2f7a42], sw: "#3f9a55", ab: { sense: 9 } },
+      { id: "capK", cat: "cap", name: "黑色探險帽", price: 24, cap: [0x34383f, 0x1f2227], sw: "#34383f", ab: { sense: 14 } },
+      { id: "bagR", cat: "bag", name: "紅色背包", price: 20, bag: [0xd9433a, 0xa92f27], sw: "#d9433a", ab: { slot: 1 } },
+      { id: "bagB", cat: "bag", name: "藍色背包", price: 20, bag: [0x2f6fd0, 0x2253a3], sw: "#2f6fd0", ab: { slot: 1 } },
+      { id: "bagY", cat: "bag", name: "黃色背包", price: 20, bag: [0xf2c230, 0xc99a14], sw: "#f2c230", ab: { slot: 1 } },
+      { id: "scarfR", cat: "scarf", name: "紅色領巾", price: 12, scarf: 0xd9433a, sw: "#d9433a" },
+      { id: "scarfY", cat: "scarf", name: "黃色領巾", price: 12, scarf: 0xf2c230, sw: "#f2c230" },
+      { id: "scarfB", cat: "scarf", name: "藍色領巾", price: 12, scarf: 0x2f6fd0, sw: "#2f6fd0" },
+      { id: "hbandW", cat: "hband", name: "白色頭帶", price: 14, hband: 0xf4f1e8, sw: "#f4f1e8", ab: { timing: 0.05 } },
+      { id: "hbandR", cat: "hband", name: "紅色頭帶", price: 14, hband: 0xd9433a, sw: "#d9433a", ab: { timing: 0.05 } },
+      { id: "wristG", cat: "wrist", name: "綠色手環", price: 12, wrist: 0x2fae62, sw: "#2fae62", ab: { drink: 1 } },
+      { id: "wristO", cat: "wrist", name: "橘色手環", price: 12, wrist: 0xf08a24, sw: "#f08a24", ab: { drink: 1 } },
+      { id: "balR", cat: "balloon", name: "紅色氣球", price: 15, balloon: 0xe2483d, sw: "#e2483d" },
+      { id: "balB", cat: "balloon", name: "藍色氣球", price: 15, balloon: 0x3b86e0, sw: "#3b86e0" },
+      { id: "fxDust", cat: "fx", name: "跑步揚塵", price: 18, fx: "💨" },
+      { id: "fxStar", cat: "fx", name: "星星腳印", price: 25, fx: "✨" },
+      { id: "fxHeart", cat: "fx", name: "愛心腳印", price: 25, fx: "💗" },
     ],
     RS_FP_CATS = [
       ["shoe", "鞋子"],
       ["badge", "徽章"],
       ["cap", "帽子"],
+      ["bag", "背包"],
+      ["scarf", "領巾"],
+      ["hband", "頭帶"],
+      ["wrist", "手環"],
+      ["balloon", "氣球"],
+      ["fx", "腳下特效"],
     ],
-    RS_FP_QUIZ_CAP = 3; // 每一種挑戰，每次自由活動前 3 次的數學題有代幣（之後仍可以挑戰自己的紀錄）
+    RS_FP_QUIZ_CAP = 3, // 每一種挑戰，每次自由活動前 3 次的數學題有代幣（之後仍可以挑戰自己的紀錄）
+    RS_FP_RIVALS = ["小風", "小雷", "小雲"], // 電腦同學（不是班上的人）
+    FpSphere = dt; // SphereGeometry（下面的函式裡 dt 常拿來當「這一格過了幾秒」，先另外取名）
   function rsFpOn() {
     return Ti().freeOff !== !0;
   }
@@ -38218,7 +38337,9 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       items: Array.isArray(f.items) ? f.items.filter((x) => RS_FP_ITEMS.some((i) => i.id === x)) : [],
       wear: f.wear && typeof f.wear == "object" ? { ...f.wear } : {},
       bestHoop: Math.max(0, Math.floor(Number(f.bestHoop) || 0)),
-      bestDash: Math.max(0, Math.floor(Number(f.bestDash) || 0)),
+      bestDash: Math.max(0, Math.floor(Number(f.bestDash) || 0)), // 3.2.x 的 10 秒衝刺紀錄（已改成賽跑，只保留資料）
+      best100: Math.max(0, Number(f.best100) || 0), // 秒；0＝還沒跑過
+      best400: Math.max(0, Number(f.best400) || 0),
       at: Number(f.at) || 0,
     };
   }
@@ -38237,9 +38358,10 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       已買造型: f.items.join("、"),
       穿戴中: RS_FP_CATS.map(([c]) => f.wear[c]).filter(Boolean).join("、"),
       投籃最佳進球: f.bestHoop,
-      衝刺最佳公尺: f.bestDash,
+      "100公尺最佳秒數": f.best100 || "",
+      "400公尺最佳秒數": f.best400 || "",
       更新時間: Vn(new Date(f.at).toISOString()),
-      資料: JSON.stringify({ c: f.coins, s: f.stickers, i: f.items, w: f.wear, h: f.bestHoop, d: f.bestDash, at: f.at }),
+      資料: JSON.stringify({ c: f.coins, s: f.stickers, i: f.items, w: f.wear, h: f.bestHoop, d: f.bestDash, r1: f.best100, r4: f.best400, at: f.at }),
     };
   }
   // 換平板：登入後從試算表讀回來的寶物比較新就採用（依更新時間）
@@ -38254,7 +38376,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       }
     if (!r || typeof r != "object" || !(Number(r.at) > rsFpGet(code).at)) return !1;
     let p = zn(code);
-    p.fp = { coins: Number(r.c) || 0, stickers: r.s || {}, items: Array.isArray(r.i) ? r.i : [], wear: r.w || {}, bestHoop: Number(r.h) || 0, bestDash: Number(r.d) || 0, at: Number(r.at) };
+    p.fp = { coins: Number(r.c) || 0, stickers: r.s || {}, items: Array.isArray(r.i) ? r.i : [], wear: r.w || {}, bestHoop: Number(r.h) || 0, bestDash: Number(r.d) || 0, best100: Number(r.r1) || 0, best400: Number(r.r4) || 0, at: Number(r.at) };
     hr(code, p);
     return !0;
   }
@@ -38265,21 +38387,46 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     a && a.free && ((a.free.earned += n), rsFpHudCoins(a));
     return f.coins;
   }
+  // 目前穿在身上的造型
+  function rsFpWorn(code) {
+    let f = rsFpGet(code),
+      out = [];
+    for (let [cat] of RS_FP_CATS) {
+      let it = RS_FP_ITEMS.find((x) => x.id === f.wear[cat] && f.items.includes(x.id));
+      it && out.push(it);
+    }
+    return out;
+  }
   // 人物目前穿戴的造型 → 交給人物建模的設定
   function rsFpCos(code) {
     if (!rsFpOn() || !code) return null;
-    let f = rsFpGet(code),
-      c = {},
+    let c = {},
       any = !1;
-    for (let [cat] of RS_FP_CATS) {
-      let it = RS_FP_ITEMS.find((x) => x.id === f.wear[cat] && f.items.includes(x.id));
-      if (!it) continue;
-      any = !0;
-      it.shoe && (c.shoe = it.shoe);
-      it.badge && (c.badge = it.badge);
-      it.cap && (c.cap = it.cap);
-    }
+    for (let it of rsFpWorn(code)) for (let k of ["shoe", "badge", "cap", "bag", "scarf", "hband", "wrist", "balloon"]) it[k] !== undefined && ((c[k] = it[k]), (any = !0));
     return any ? c : null;
+  }
+  // 造型帶的能力（只在自由活動用；練習流程完全不讀這個）
+  function rsFpAb(code) {
+    let ab = { speed: 0, sense: 5, start: 0, slot: 0, timing: 0, drink: 0, fx: "" };
+    if (!rsFpOn() || !code) return ab;
+    for (let it of rsFpWorn(code)) {
+      let b = it.ab || {};
+      ((ab.speed += b.speed || 0), (ab.sense = Math.max(ab.sense, b.sense || 0)), (ab.start += b.start || 0), (ab.slot += b.slot || 0), (ab.timing += b.timing || 0), (ab.drink += b.drink || 0), it.fx && (ab.fx = it.fx));
+    }
+    return ab;
+  }
+  function rsFpAbText(b) {
+    if (!b) return "";
+    return [
+      b.speed ? `走路、賽跑快 ${Math.round(b.speed * 100)}%` : "",
+      b.sense ? `${b.sense} 公尺內有藏起來的貼紙會提醒` : "",
+      b.start ? `完美起跑比較容易${b.start >= 0.15 ? "（很多）" : b.start >= 0.1 ? "（多一點）" : ""}` : "",
+      b.slot ? `400 公尺可以多帶 ${b.slot} 個道具` : "",
+      b.timing ? "100 公尺衝刺時機比較好按" : "",
+      b.drink ? `能量飲多 ${b.drink} 秒` : "",
+    ]
+      .filter(Boolean)
+      .join("、");
   }
   // 任務第一次接就答對 → ＋1 代幣（不顯示在作答畫面上，結算時一起說）
   function rsFpTaskCoin(a) {
@@ -38299,9 +38446,29 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
         ".fp-pill .tag{background:#f5b82e;color:#3b2a00;border-radius:999px;padding:2px 12px;font-size:15px}.fp-pill .n{font-variant-numeric:tabular-nums}",
         ".fp-pill{flex:none}@media (max-width:599px){.fp-pill{gap:6px;padding:6px 10px;font-size:14px}.fp-pill .tag,.fp-pill .w{display:none}.hud:has(.fp-pill){gap:5px;padding-left:8px;padding-right:8px}.hud:has(.fp-pill) .iconbtn{padding:0 9px;min-width:42px}}",
         ".fp-pill.pop{animation:fpPop .45s ease-out}@keyframes fpPop{0%{transform:scale(1)}40%{transform:scale(1.12)}100%{transform:scale(1)}}",
-        "#overlay3d > .fp-near{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));white-space:nowrap;box-shadow:var(--shadow)}",
+        "#overlay3d > .fp-near{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));white-space:nowrap;display:flex;gap:8px;max-width:calc(100% - 16px)}",
+        ".fp-near .btn{box-shadow:var(--shadow);min-height:52px;border-radius:999px;font-size:18px;padding:0 20px}@media (max-width:599px){.fp-near .btn{font-size:16px;padding:0 14px}}",
+        ".fp-pill .sense{display:none;color:#0b6b3a}.fp-pill.near .sense{display:inline}",
+        ".fp-prog{position:absolute;top:calc(116px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);width:min(520px,76vw);height:22px;background:rgba(255,255,255,.92);border-radius:999px;box-shadow:var(--shadow);pointer-events:none}",
+        ".fp-prog:after{content:'終點';position:absolute;right:-6px;top:-22px;font-size:13px;font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.7)}",
+        ".fp-prog i{position:absolute;top:50%;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;background:#8b96a3;color:#fff;font:700 12px/22px system-ui,sans-serif;text-align:center;font-style:normal}",
+        ".fp-prog i.me{background:#e2483d;z-index:2;width:28px;height:28px;margin:-14px 0 0 -14px;line-height:28px;border:2px solid #fff;box-sizing:border-box;line-height:24px}",
+        ".fp-banner{position:absolute;left:50%;top:36%;transform:translate(-50%,-50%);font-size:clamp(32px,8vmin,64px);font-weight:800;color:#fff;text-shadow:0 3px 0 rgba(0,0,0,.45),0 0 18px rgba(0,0,0,.4);pointer-events:none;white-space:nowrap;text-align:center}",
+        ".fp-banner small{display:block;font-size:.45em;font-weight:700}",
+        ".fp-act{min-width:200px;min-height:76px;border-radius:999px;font-size:26px;font-weight:800;border:3px solid #fff;background:#e2483d;color:#fff;box-shadow:var(--shadow);cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none}",
+        ".fp-act.item{background:#2f6fd0;min-width:170px;font-size:22px}.fp-act:disabled{opacity:.45}",
+        ".play-ui > .fp-lane{position:absolute;bottom:calc(20px + env(safe-area-inset-bottom,0px));width:88px;height:88px;border-radius:50%;font-size:34px;font-weight:800;border:3px solid #fff;background:rgba(255,255,255,.93);box-shadow:var(--shadow);cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none}",
+        ".play-ui > .fp-lane.l{left:calc(18px + env(safe-area-inset-left,0px))}.play-ui > .fp-lane.r{right:calc(18px + env(safe-area-inset-right,0px))}",
+        ".fp-timing{position:relative;width:min(380px,72vw);height:26px;border-radius:999px;background:#fff;overflow:hidden;border:3px solid #fff;box-shadow:var(--shadow)}",
+        ".fp-timing .y,.fp-timing .g,.fp-timing .p{position:absolute;top:0;bottom:0}.fp-timing .y{background:#f5d76e}.fp-timing .g{background:#43b05a}.fp-timing .p{width:8px;margin-left:-4px;background:#1f2d24;border-radius:4px}",
+        ".fp-rank{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:3px}.fp-rank li{display:flex;gap:10px;font-variant-numeric:tabular-nums}.fp-rank li.me{font-weight:800}.fp-rank li span:first-child{min-width:4.2em}",
+        ".fp-item .nm small{display:block;font-weight:400;font-size:13px;color:var(--ink-soft,#5b6470);line-height:1.3}",
+        ".fp-st.gold.has{border-color:#d99a00;background:linear-gradient(135deg,#fff3c4,#ffe08a)}.fp-st.gold:not(.has){border-color:#d9b44a}",
+        "@media (max-width:480px){.play-ui > .fp-lane{bottom:calc(160px + env(safe-area-inset-bottom,0px));width:76px;height:76px}}",
+        "@media (max-height:500px){.fp-prog{top:calc(58px + env(safe-area-inset-top,0px))}.fp-act{min-height:60px;font-size:22px;min-width:160px}.play-ui > .fp-lane{width:70px;height:70px}}",
         "#overlay3d > .fp-dash{position:absolute;left:50%;top:calc(70px + env(safe-area-inset-top,0px));transform:translateX(-50%);background:rgba(31,45,36,.9);color:#fff;border-radius:16px;padding:8px 20px;font-weight:700;text-align:center;pointer-events:none;min-width:230px}",
         ".fp-dash b{display:block;font-size:34px;line-height:1.15;font-variant-numeric:tabular-nums}.fp-dash span{font-size:16px}",
+        "#overlay3d > #fp-clue{max-width:min(600px,92vw);width:max-content;padding:8px 16px}#fp-clue span{display:block;font-size:15px;line-height:1.45;font-weight:400}#fp-clue b{font-size:22px;margin-top:2px}",
         ".fp-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin:10px 0}@media (max-width:640px){.fp-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}",
         ".fp-st{position:relative;aspect-ratio:1;border-radius:14px;border:2px dashed var(--line-strong);background:var(--panel);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:13px;line-height:1.2;text-align:center;padding:2px}",
         ".fp-st.has{border:2px solid #f0c94a;background:#fffbea}.fp-st .e{font-size:clamp(26px,5vmin,40px);line-height:1}.fp-st .x{position:absolute;right:4px;top:2px;font-size:12px;color:#7a5a00;font-weight:700}",
@@ -38337,21 +38504,44 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       last: performance.now(),
       found: 0,
       hoopN: 0,
-      dashN: 0,
       hoopBest: 0,
-      dashBest: 0,
+      raceN: 0,
+      r100N: 0,
+      r400N: 0,
+      r100Best: 0,
+      r400Best: 0,
       quizOK: 0,
       quizN: 0,
       earned: 0,
       spent: 0,
       spots: [],
-      dash: null,
+      props: [],
+      hintI: 0,
       marker: null,
+      trail: [],
     };
     (va(), a.hideBubble(), a.panel.close(), a.removeOverlay(".trays, .replay, .coach"), w.clearStation());
     (a.setMode("explore"), w.setMode("explore"), w.resetView(!0), a.renderHud(), a.renderNav(), requestAnimationFrame(() => w.resize()));
-    (rsFpSpawn(a), rsFpMarker(a), rsFpLog(a));
-    a.toast(`自由活動開始！操場上藏了 ${RS_FP_COUNT} 張貼紙，去找找看。`, 4200);
+    (rsFpApplyAb(a), rsFpSpawn(a), rsFpMarker(a), rsFpLog(a));
+    a.toast(`自由活動開始！操場上藏了 ${RS_FP_COUNT} 張貼紙，有些要動手才找得到。找不到可以按「提示」。`, 5200);
+  }
+  // 老師試玩：用「訪客」進入、名字填「試玩」，選好小節後直接進自由活動，並先給 60 枚代幣。
+  // 訪客本來就不寫試算表、不存到平板，所以不會留下任何紀錄。
+  function rsFpTryCheck(a) {
+    let S = a.session;
+    if (!rsFpOn() || !rsIsGuest() || String(RS_ENTRY.name || "").trim() !== "試玩" || !S || !S.section) return;
+    setTimeout(() => {
+      if (a.session !== S || a.free) return;
+      ((S.index = S.total), (S.done = !0), rsFpStart(a));
+      if (!a.free) return;
+      let f = rsFpGet(S.code);
+      f.coins < 60 && ((f.coins = 60), rsFpSave(S.code, f, !0), rsFpHudCoins(a));
+      a.toast("試玩模式：跳過答題，先給 60 枚代幣。訪客身分不會留下紀錄。", 5200);
+    }, 700);
+  }
+  function rsFpApplyAb(a) {
+    let F = a.free;
+    F && ((F.ab = rsFpAb(F.code)), (a.world.speedMul = 1 + F.ab.speed));
   }
   function rsFpEnd(a) {
     let F = a && a.free;
@@ -38359,14 +38549,17 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     (rsFpTick(a), rsFpLog(a));
     let w = a.world;
     for (let s of F.spots) s.g && w.scene.remove(s.g);
+    for (let p of F.props) p.g && w.scene.remove(p.g);
+    for (let t of F.trail) w.scene.remove(t.m);
     F.marker && w.scene.remove(F.marker);
-    (a.removeOverlay(".fp-near, .fp-dash"), (a.free = null));
+    ((w.speedMul = 1), a.removeOverlay(".fp-near, .fp-dash"), (a.free = null));
   }
   function rsFpTick(a) {
     let F = a.free,
       t = performance.now(),
       d = (t - F.last) / 1e3;
     ((F.last = t), d > 0 && d < 5 && document.visibilityState !== "hidden" && (F.active += d));
+    return d > 0 && d < 0.2 ? d : 0;
   }
   // 寫一列到試算表「自由活動」（同一次自由活動會更新同一列）
   function rsFpLog(a) {
@@ -38383,8 +38576,9 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       找到貼紙數: F.found,
       投籃挑戰次數: F.hoopN,
       投籃最佳進球: F.hoopBest,
-      衝刺挑戰次數: F.dashN,
-      衝刺最佳公尺: F.dashBest,
+      賽跑次數: F.raceN,
+      "100公尺最佳秒數": F.r100Best || "",
+      "400公尺最佳秒數": F.r400Best || "",
       挑戰題數: F.quizN,
       挑戰題答對數: F.quizOK,
       獲得代幣: F.earned,
@@ -38410,7 +38604,8 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
         { class: "fp-pill", id: "fp-pill" },
         T("span", { class: "tag" }, "自由活動"),
         T("span", { id: "fp-coins", class: "n", "aria-label": `代幣 ${f.coins} 枚` }, `🪙 ${f.coins}`),
-        T("span", { id: "fp-found", class: "n" }, T("span", { class: "w" }, "貼紙 "), T("span", { "aria-hidden": "true" }, "📒"), ` ${F.found}／${RS_FP_COUNT}`),
+        T("span", { id: "fp-found", class: "n" }, T("span", { class: "w" }, "貼紙 "), T("span", { "aria-hidden": "true" }, "📒"), ` ${F.found}／${F.spots.length || RS_FP_COUNT}`),
+        T("span", { id: "fp-sense", class: "sense", role: "status" }, "📡", T("span", { class: "w" }, " 附近有貼紙")),
       ),
       T("span", { class: "spacer" }),
       ib("fp-hint", "🔍", "提示", () => rsFpHint(a)),
@@ -38428,133 +38623,388 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       n = a.overlay.querySelector("#fp-found"),
       p = a.overlay.querySelector("#fp-pill"),
       v = rsFpGet(F.code).coins;
-    (c && ((c.textContent = `🪙 ${v}`), c.setAttribute("aria-label", `代幣 ${v} 枚`)), n && (n.lastChild.textContent = ` ${F.found}／${RS_FP_COUNT}`));
+    (c && ((c.textContent = `🪙 ${v}`), c.setAttribute("aria-label", `代幣 ${v} 枚`)), n && (n.lastChild.textContent = ` ${F.found}／${F.spots.length || RS_FP_COUNT}`));
     pop && p && (p.classList.remove("pop"), void p.offsetWidth, p.classList.add("pop"));
   }
 
   // ---------- 藏寶：貼紙 ----------
-  function rsFpStickerTex(id) {
-    let s = RS_FP_STICKERS.find((x) => x[0] === id) || RS_FP_STICKERS[0];
-    return rsTex("fpSticker_" + id, 160, 160, (g, W, H) => {
-      (g.clearRect(0, 0, W, H), g.beginPath(), g.arc(W / 2, H / 2, W / 2 - 4, 0, Math.PI * 2), (g.fillStyle = "#ffffff"), g.fill());
-      ((g.lineWidth = 9), (g.strokeStyle = "#f5b82e"), g.stroke());
-      ((g.font = '92px "Apple Color Emoji","Noto Color Emoji","Segoe UI Emoji",sans-serif'), (g.textAlign = "center"), (g.textBaseline = "middle"), g.fillText(s[1], W / 2, H / 2 + 6));
+  var rsFpDef = (id) => RS_FP_STICKERS.find((x) => x[0] === id) || RS_FP_STICKERS[0];
+  function rsFpEmojiTex(key, emoji, ring, bg) {
+    return rsTex("fpE_" + key, 160, 160, (g, W, H) => {
+      (g.clearRect(0, 0, W, H), g.beginPath(), g.arc(W / 2, H / 2, W / 2 - 4, 0, Math.PI * 2), (g.fillStyle = bg || "#ffffff"), g.fill());
+      ((g.lineWidth = 9), (g.strokeStyle = ring || "#f5b82e"), g.stroke());
+      ((g.font = '92px "Apple Color Emoji","Noto Color Emoji","Segoe UI Emoji",sans-serif'), (g.textAlign = "center"), (g.textBaseline = "middle"), g.fillText(emoji, W / 2, H / 2 + 6));
     });
+  }
+  function rsFpStickerTex(id) {
+    let s = rsFpDef(id);
+    return rsFpEmojiTex(id, s[1], s[3] ? "#d99a00" : "#f5b82e", s[3] ? "#fff1b8" : "#ffffff");
+  }
+  // 浮在空中的圓牌（貼紙、紙條）
+  function rsFpDisc(w, tex, x, y, z, gold) {
+    let g = new Re(),
+      disc = new ne(new sn(0.42, 28), new nt({ map: tex, transparent: !0, side: _t, depthWrite: !1 })),
+      ring = new ne(new Hn(0.5, 0.035, 8, 28), new nt({ color: gold ? 14260736 : 16103470 })),
+      glow = new ne(new sn(0.7, 24), new nt({ color: 16770920, transparent: !0, opacity: 0.35, depthWrite: !1 }));
+    ((glow.rotation.x = -Math.PI / 2), (glow.position.y = -1.05), g.add(disc, ring, glow));
+    g.traverse((o) => (o.userData.noOutline = !0));
+    (g.position.set(x, y, z), w.scene.add(g));
+    return g;
+  }
+  var rsFpShuffle = (arr) => arr.map((v) => ({ v, r: Math.random() })).sort((x, y) => x.r - y.r).map((x) => x.v);
+  function rsFpBushMesh() {
+    let g = new Re(),
+      cols = [5216842, 4558392, 6205011];
+    [
+      [0, 0.38, 0, 0.55],
+      [-0.42, 0.3, 0.1, 0.4],
+      [0.4, 0.28, -0.08, 0.42],
+      [0.05, 0.62, -0.05, 0.36],
+      [-0.1, 0.25, 0.36, 0.34],
+    ].forEach(([x, y, z, r], i) => {
+      let m = new ne(new FpSphere(r, 10, 8), Te(cols[i % 3]));
+      (m.position.set(x, y, z), (m.scale.y = 0.85), (m.castShadow = !0), g.add(m));
+    });
+    g.traverse((o) => (o.userData.noOutline = !0));
+    return g;
+  }
+  function rsFpBinMesh(col) {
+    let g = new Re(),
+      body = new ne(new Ze(0.72, 0.9, 0.72), Te(col)),
+      hinge = new Re(),
+      lid = new ne(new Ze(0.8, 0.1, 0.8), Te(col)),
+      label = new ne(new Qe(0.4, 0.4), new nt({ map: rsFpEmojiTex("recycle", "♻️", "#ffffff", "#ffffff"), transparent: !0 }));
+    (body.position.y = 0.45), (body.castShadow = !0);
+    (lid.position.set(0, 0.05, 0.4), hinge.position.set(0, 0.9, -0.4), hinge.add(lid));
+    (label.position.set(0, 0.48, 0.365), g.add(body, hinge, label));
+    g.traverse((o) => (o.userData.noOutline = !0));
+    g.userData.hinge = hinge;
+    return g;
   }
   function rsFpSpawn(a) {
     let F = a.free,
       w = a.world,
       f = rsFpGet(F.code),
-      pool = RS_FP_SPOTS.map((s) => ({ s, r: Math.random() })).sort((x, y) => x.r - y.r).map((x) => x.s),
-      pick = [];
+      far = (x, z, d) => Math.hypot(x - w.pos.x, z - w.pos.z) >= d,
+      pool = rsFpShuffle(RS_FP_SPOTS),
+      open = [];
+    // 走到就有的
     for (let s of pool) {
-      if (pick.length >= RS_FP_COUNT) break;
+      if (open.length >= RS_FP_OPEN + 1) break; // 多挑一個給「紙條」用
       let p = w.nav.nearestFree(s[0], s[1]);
       if (Math.hypot(p.x - s[0], p.z - s[1]) > 3) continue; // 被新的擺設擋住的位置跳過
-      if (Math.hypot(p.x - w.pos.x, p.z - w.pos.z) < 10) continue; // 不要一開始就在腳邊
-      if (pick.some((q) => Math.hypot(q.x - p.x, q.z - p.z) < 14)) continue;
-      pick.push({ x: p.x, z: p.z, where: s[2] });
+      if (!far(p.x, p.z, 10)) continue; // 不要一開始就在腳邊
+      if (open.some((q) => Math.hypot(q.x - p.x, q.z - p.z) < 14)) continue;
+      if (RS_FP_BUSH_AT.some((q) => Math.hypot(q[0] - p.x, q[1] - p.z) < 7) || Math.hypot(gt.recycle.x - p.x, gt.recycle.z + 3 - p.z) < 6) continue; // 不要和草叢、回收桶疊在一起
+      open.push({ x: p.x, z: p.z, where: s[2] });
     }
-    // 還沒有的貼紙優先；都有了就隨機
-    let missing = RS_FP_STICKERS.map((x) => x[0]).filter((id) => !f.stickers[id]).sort(() => Math.random() - 0.5),
-      rest = RS_FP_STICKERS.map((x) => x[0]).sort(() => Math.random() - 0.5),
-      ids = missing.concat(rest.filter((id) => !missing.includes(id)));
-    F.spots = pick.map((p, i) => {
-      let id = ids[i % ids.length],
-        g = new Re(),
-        disc = new ne(new sn(0.42, 28), new nt({ map: rsFpStickerTex(id), transparent: !0, side: _t, depthWrite: !1 })),
-        ring = new ne(new Hn(0.5, 0.035, 8, 28), new nt({ color: 16103470 })),
-        glow = new ne(new sn(0.7, 24), new nt({ color: 16770920, transparent: !0, opacity: 0.35, depthWrite: !1 }));
-      ((glow.rotation.x = -Math.PI / 2), (glow.position.y = -1.05), g.add(disc, ring, glow));
-      g.traverse((o) => (o.userData.noOutline = !0));
-      (g.position.set(p.x, rsGroundY(p.x, p.z) + 1.15, p.z), w.scene.add(g));
-      return { x: p.x, z: p.z, where: p.where, id, g, got: !1, ph: Math.random() * 6, y0: g.position.y };
-    });
+    let notePos = open.length > RS_FP_OPEN ? open.pop() : null,
+      // 還沒有的貼紙優先；都有了就隨機
+      order = (gold) => {
+        let all = RS_FP_STICKERS.filter((x) => !!x[3] === gold).map((x) => x[0]),
+          missing = rsFpShuffle(all.filter((id) => !f.stickers[id]));
+        return missing.concat(rsFpShuffle(all.filter((id) => !missing.includes(id))));
+      },
+      ids = order(!1),
+      gids = order(!0),
+      nextId = (hidden) => (hidden && Math.random() < 0.5 ? gids.shift() || ids.shift() : ids.shift() || gids.shift()),
+      spots = [],
+      add = (o) => {
+        let id = nextId(o.type !== "open");
+        return (spots.push(Object.assign({ id, gold: !!rsFpDef(id)[3], got: !1, g: null, ph: Math.random() * 6 }, o)), spots[spots.length - 1]);
+      };
+    for (let p of open) {
+      let s = add({ type: "open", x: p.x, z: p.z, where: p.where });
+      ((s.g = rsFpDisc(w, rsFpStickerTex(s.id), p.x, rsGroundY(p.x, p.z) + 1.15, p.z, s.gold)), (s.y0 = s.g.position.y));
+    }
+    // 要動手找的：五種裡挑四種（測試可以用 window.__rsFpTypes 指定）
+    let types = (Array.isArray(window.__rsFpTypes) ? window.__rsFpTypes.slice() : rsFpShuffle(["ride", "stage", "bush", "bin", "clue"])).slice(0, RS_FP_COUNT - open.length),
+      A = gt.stage,
+      R = gt.recycle;
+    F.props = [];
+    for (let ty of types) {
+      if (ty === "ride") {
+        let kinds = Object.keys(RS_FP_RIDES),
+          k = window.__rsFpRide || kinds[Math.floor(Math.random() * kinds.length)],
+          tg = plList().filter((t) => t.kind === k).sort((p, q) => Math.hypot(p.app.x - w.pos.x, p.app.z - w.pos.z) - Math.hypot(q.app.x - w.pos.x, q.app.z - w.pos.z))[0];
+        add({ type: "ride", ride: k, x: tg ? tg.app.x : 0, z: tg ? tg.app.z : 30, where: k === "hoop" ? "籃球場" : "遊樂設施" });
+      } else if (ty === "stage") {
+        let x = A.x + (Math.random() * 2 - 1) * (A.w / 2 - 2),
+          z = A.z + A.d / 2 - 1.3,
+          s = add({ type: "stage", x, z, where: "司令臺" });
+        ((s.g = rsFpDisc(w, rsFpStickerTex(s.id), x, A.h + 1.15, z, s.gold)), (s.y0 = s.g.position.y), (s.g.children[2].position.y = -1.12));
+      } else if (ty === "bush") {
+        let c = rsFpShuffle(RS_FP_BUSH_AT).find((b) => {
+            let p = w.nav.nearestFree(b[0], b[1]);
+            return Math.hypot(p.x - b[0], p.z - b[1]) < 1.5 && far(b[0], b[1], 12);
+          }) || RS_FP_BUSH_AT[0],
+          has = Math.floor(Math.random() * 3),
+          s = add({ type: "bush", x: c[0], z: c[1], where: c[2] });
+        [
+          [-2.6, 0.5],
+          [0, -0.7],
+          [2.6, 0.4],
+        ].forEach(([ox, oz], i) => {
+          let g = rsFpBushMesh(),
+            x = c[0] + ox,
+            z = c[1] + oz;
+          (g.position.set(x, rsGroundY(x, z), z), (g.rotation.y = Math.random() * 6), w.scene.add(g));
+          F.props.push({ kind: "bush", x, z, g, spot: s, has: i === has, done: !1, ph: Math.random() * 6 });
+          i === has && ((s.x = x), (s.z = z));
+        });
+      } else if (ty === "bin") {
+        let has = Math.floor(Math.random() * 3),
+          z = R.z + R.d / 2 + 1.25,
+          s = add({ type: "bin", x: R.x, z, where: "資源回收室" });
+        [2470864, 4168277, 14856994].forEach((col, i) => {
+          let g = rsFpBinMesh(col),
+            x = R.x - 1.6 + i * 1.6;
+          (g.position.set(x, 0, z), w.scene.add(g));
+          F.props.push({ kind: "bin", x, z, g, spot: s, has: i === has, done: !1 });
+          i === has && (s.x = x);
+        });
+      } else if (ty === "clue" && notePos) {
+        // 數學紙條：照著算出來的距離，從起跑線沿跑道走過去
+        let speed = Math.random() < 0.5,
+          v = [2, 3, 4][Math.floor(Math.random() * 3)],
+          t = speed ? [5, 6, 8, 10].filter((x) => x * v <= 40)[Math.floor(Math.random() * [5, 6, 8, 10].filter((x) => x * v <= 40).length)] : 0,
+          n = speed ? v * t : [12, 18, 24, 30, 36][Math.floor(Math.random() * 5)],
+          s = add({
+            type: "clue",
+            x: notePos.x,
+            z: notePos.z,
+            where: notePos.where,
+            n,
+            note: !1,
+            text: speed ? `從司令臺前的起跑線，沿著跑道往涼亭的方向，用每秒 ${v} 公尺的速率走 ${t} 秒，貼紙就在那裡。` : `從司令臺前的起跑線，沿著跑道往涼亭的方向走 ${n} 公尺，貼紙就在那裡。`,
+          });
+        ((s.g = rsFpDisc(w, rsFpEmojiTex("note", "📜", "#8a6a3a", "#fff8e6"), notePos.x, rsGroundY(notePos.x, notePos.z) + 1.15, notePos.z)), (s.y0 = s.g.position.y));
+      }
+    }
+    F.spots = spots;
+    rsFpHudCoins(a);
   }
-  function rsFpCollect(a, s) {
-    let F = a.free,
-      f = rsFpGet(F.code),
-      def = RS_FP_STICKERS.find((x) => x[0] === s.id),
-      isNew = !f.stickers[s.id];
-    ((s.got = !0), (s.pop = 0), (f.stickers[s.id] = (f.stickers[s.id] || 0) + 1), (f.coins += 1), rsFpSave(F.code, f), F.found++, (F.earned += 1));
+  function rsFpCollect(a, s, inPlay) {
+    let F = a.free;
+    if (!F || s.got) return;
+    let f = rsFpGet(F.code),
+      def = rsFpDef(s.id),
+      isNew = !f.stickers[s.id],
+      coin = s.gold ? 2 : 1;
+    ((s.got = !0), (s.pop = 0), (f.stickers[s.id] = (f.stickers[s.id] || 0) + 1), (f.coins += coin), rsFpSave(F.code, f), F.found++, (F.earned += coin));
     try {
       Ri.star();
     } catch {}
-    a.world.emote && a.world.emote("player", "cheer");
     (rsFpHudCoins(a, !0), rsFpLog(a));
-    let left = F.spots.filter((x) => !x.got).length;
-    a.toast(`找到貼紙：${def[1]} ${def[2]}${isNew ? "（新的！）" : ""}　＋1 代幣${left ? `　還有 ${left} 張` : "　5 張都找到了！"}`, 3600);
+    let left = F.spots.filter((x) => !x.got).length,
+      msg = `找到${s.gold ? "金色" : ""}貼紙：${def[1]} ${def[2]}${isNew ? "（新的！）" : ""}　＋${coin} 代幣${left ? `　還有 ${left} 張` : `　${F.spots.length} 張都找到了！`}`;
+    if (inPlay) (a.playTip(msg), s.g && (a.world.scene.remove(s.g), (s.g = null)));
+    else (a.world.emote && a.world.emote("player", "cheer"), a.toast(msg, 3800));
+  }
+  function rsFpHintText(a, s) {
+    if (s.type === "open") return `有一張就放在「${s.where}」附近，走過去就看得到。`;
+    if (s.type === "ride") return `有一張藏在${s.where === "籃球場" ? "籃球場" : "遊樂設施"}裡：去${RS_FP_RIDES[s.ride][0]}，${RS_FP_RIDES[s.ride][1]}，貼紙就會掉出來。`;
+    if (s.type === "stage") return "有一張在司令臺上。走到司令臺正前方，就可以上去拿。";
+    if (s.type === "bush") return `有一張藏在「${s.where}」的草叢裡。那裡有三叢草，找找看哪一叢在晃。`;
+    if (s.type === "bin") return "有一張藏在資源回收室前面的回收桶裡，走過去打開看看。";
+    return s.note ? "紙條上寫：" + s.text : `有一張要先找到紙條。紙條在「${s.where}」附近。`;
   }
   function rsFpHint(a) {
     let F = a.free,
-      w = a.world,
       left = F.spots.filter((s) => !s.got);
-    if (!left.length) return a.toast("這次的貼紙都找到了。可以去投籃、跑道挑戰，或換造型。", 3600);
-    let n = left.sort((p, q) => Math.hypot(p.x - w.pos.x, p.z - w.pos.z) - Math.hypot(q.x - w.pos.x, q.z - w.pos.z))[0],
-      d = Math.round(Math.hypot(n.x - w.pos.x, n.z - w.pos.z));
-    a.toast(`最近的一張在「${n.where}」附近，離你大約 ${d} 公尺。`, 4200);
+    if (!left.length) return a.toast("這次的貼紙都找到了。可以去投籃、賽跑，或換造型。", 3600);
+    a.toast(rsFpHintText(a, left[F.hintI++ % left.length]), 5200);
+  }
+  // 翻草叢、開回收桶
+  function rsFpProp(a, p) {
+    let F = a.free;
+    if (!F || p.done) return;
+    ((p.done = !0), (p.at = performance.now()));
+    try {
+      Ri.soft();
+    } catch {}
+    if (p.has) {
+      let s = p.spot,
+        w = a.world;
+      F.props.forEach((q) => q.spot === s && (q.done = !0));
+      ((s.g = rsFpDisc(w, rsFpStickerTex(s.id), p.x, rsGroundY(p.x, p.z) + 1.25, p.z, s.gold)), (s.y0 = s.g.position.y));
+      setTimeout(() => a.free === F && rsFpCollect(a, s), 380);
+    } else a.toast(p.kind === "bush" ? "這叢草裡沒有。再看看哪一叢在晃？" : "這一桶是空的，再開別桶看看。", 2600);
+  }
+  // 玩設施時：條件達到就掉出貼紙
+  function rsFpPlayHook(a, G) {
+    if (!a.free) return;
+    a.removeOverlay(".fp-near, .fp-dash");
+    let u = G.update.bind(G);
+    G.update = (e, t) => {
+      u(e, t);
+      a.free && (rsFpTick(a), rsFpRideCheck(a, G));
+    };
+  }
+  function rsFpRideCheck(a, G) {
+    let s = a.free.spots.find((x) => x.type === "ride" && !x.got);
+    if (!s) return;
+    let k = s.ride,
+      ok = k === "swing" ? G instanceof PlSwing && Math.abs(G.th) > 0.8 : k === "hoop" ? G instanceof PlHoop && G.made > 0 : k === "slide" ? G instanceof PlSlide && G.phase === "done" : G instanceof PlSpin && Math.abs(G.om) > 2.4;
+    ok && rsFpCollect(a, s, !0);
   }
 
-  // ---------- 10 秒衝刺的起點牌子 ----------
-  var RS_FP_DASH_AT = { x: 1.6, z: -27.9 };
+  // ---------- 賽跑挑戰站的牌子（司令臺前跑道邊） ----------
+  var RS_FP_RACE_AT = { x: 1.6, z: -27.9 };
   function rsFpMarker(a) {
     let w = a.world,
       g = new Re(),
-      tex = rsTex("fpDashSign", 512, 256, (c, W, H) => {
+      tex = rsTex("fpRaceSign", 512, 256, (c, W, H) => {
         ((c.fillStyle = "#1f6fd1"), c.fillRect(0, 0, W, H), (c.strokeStyle = "#ffffff"), (c.lineWidth = 12), c.strokeRect(10, 10, W - 20, H - 20));
-        ((c.fillStyle = "#ffffff"), (c.textAlign = "center"), (c.textBaseline = "middle"), (c.font = '700 96px "Noto Sans TC","PingFang TC",sans-serif'), c.fillText("10 秒衝刺", W / 2, H * 0.4));
-        ((c.font = '700 50px "Noto Sans TC","PingFang TC",sans-serif'), (c.fillStyle = "#ffe27a"), c.fillText("挑戰站", W / 2, H * 0.76));
+        ((c.fillStyle = "#ffffff"), (c.textAlign = "center"), (c.textBaseline = "middle"), (c.font = '700 92px "Noto Sans TC","PingFang TC",sans-serif'), c.fillText("賽跑挑戰站", W / 2, H * 0.4));
+        ((c.font = '700 46px "Noto Sans TC","PingFang TC",sans-serif'), (c.fillStyle = "#ffe27a"), c.fillText("100 公尺・400 公尺", W / 2, H * 0.76));
       }),
       board = new ne(new Qe(1.9, 0.95), new nt({ map: tex, side: _t })),
       post = new ne(new Le(0.05, 0.05, 1.7, 8), Te(9079434)),
       post2 = post.clone();
     (board.position.set(0, 1.95, 0), post.position.set(-0.8, 0.85, 0), post2.position.set(0.8, 0.85, 0), g.add(board, post, post2));
     g.traverse((o) => (o.userData.noOutline = !0));
-    (g.position.set(RS_FP_DASH_AT.x, 0, RS_FP_DASH_AT.z), w.scene.add(g), (a.free.marker = g));
+    (g.position.set(RS_FP_RACE_AT.x, 0, RS_FP_RACE_AT.z), w.scene.add(g), (a.free.marker = g));
+  }
+  function rsFpRaceTg(len) {
+    let p = RS_FP_RACE_AT;
+    return { id: "race" + len, kind: "race", len, name: `${len} 公尺賽跑`, box: { minX: p.x - 1, maxX: p.x + 1, minY: 0, maxY: 2.5, minZ: p.z - 0.3, maxZ: p.z + 0.3 }, app: { x: p.x, z: p.z + 1.6 } };
+  }
+  function rsFpStageTg(s) {
+    let A = gt.stage,
+      zf = A.z + A.d / 2;
+    return { id: "fpstage", kind: "fpstage", name: "司令臺", spot: s, box: { minX: A.x - A.w / 2, maxX: A.x + A.w / 2, minY: 0, maxY: A.roofH, minZ: A.z - A.d / 2, maxZ: zf }, app: { x: s.x, z: zf + 1.4 } };
+  }
+
+  // ---------- 腳下特效（買了才有；只在自由活動） ----------
+  function rsFpTrail(a, e, x, y, z, moving) {
+    let F = a.free,
+      w = a.world;
+    if (!F) return;
+    let fx = F.ab && F.ab.fx;
+    if (fx && moving && !w.reduced) {
+      F.trailT = (F.trailT || 0) + e;
+      if (F.trailT > 0.13) {
+        F.trailT = 0;
+        let t = F.trail.find((q) => q.life <= 0);
+        if (!t) {
+          if (F.trail.length >= 14) t = null;
+          else {
+            let m = new ne(new Qe(0.34, 0.34), new nt({ transparent: !0, depthWrite: !1 }));
+            ((m.userData.noOutline = !0), (t = { m, life: 0 }), F.trail.push(t), w.scene.add(m));
+          }
+        }
+        if (t) {
+          ((t.m.material.map = rsTex("fpFx_" + fx, 96, 96, (g, W, H) => {
+            (g.clearRect(0, 0, W, H), (g.font = '70px "Apple Color Emoji","Noto Color Emoji","Segoe UI Emoji",sans-serif'), (g.textAlign = "center"), (g.textBaseline = "middle"), g.fillText(fx, W / 2, H / 2 + 4));
+          })),
+            (t.m.material.needsUpdate = !0));
+          (t.m.position.set(x + (Math.random() - 0.5) * 0.4, y + 0.16, z + (Math.random() - 0.5) * 0.4), (t.life = 0.7), (t.m.visible = !0));
+        }
+      }
+    }
+    for (let t of F.trail) {
+      if (t.life <= 0) continue;
+      ((t.life -= e), (t.m.position.y += e * 0.7), (t.m.material.opacity = Math.max(0, t.life / 0.7)), t.m.quaternion.copy(w.camera.quaternion), t.life <= 0 && (t.m.visible = !1));
+    }
   }
 
   // ---------- 每一格 ----------
   function rsFpFrame(a) {
     let F = a.free,
       w = a.world,
-      t = performance.now() / 1e3;
-    rsFpTick(a);
+      now = performance.now(),
+      t = now / 1e3,
+      e = rsFpTick(a),
+      near = (x, z, d) => Math.hypot(x - w.pos.x, z - w.pos.z) < d,
+      busy = !!a.play || Mi();
+    // 腳下特效
+    let mv = F.lastPos ? Math.hypot(w.pos.x - F.lastPos.x, w.pos.z - F.lastPos.z) > 0.004 : !1;
+    ((F.lastPos = { x: w.pos.x, z: w.pos.z }), rsFpTrail(a, e, w.pos.x, rsGroundY(w.pos.x, w.pos.z), w.pos.z, mv));
+    let clueBox = null,
+      senseD = 1 / 0;
     for (let s of F.spots) {
-      if (!s.g) continue;
-      if (s.got) {
+      if (s.g && s.got) {
         // 收集動畫：放大、往上、淡出
-        s.pop = s.pop || performance.now();
-        let k = Math.min(1, (performance.now() - s.pop) / 600);
+        s.pop = s.pop || now;
+        let k = Math.min(1, (now - s.pop) / 600);
         (s.g.scale.setScalar(1 + k * 0.9), (s.g.position.y = s.y0 + 1.1 * k), s.g.children.forEach((m) => ((m.material = m.userData.own || (m.userData.own = m.material.clone())), (m.material.transparent = !0), (m.material.opacity = 1 - k))));
         k >= 1 && (w.scene.remove(s.g), (s.g = null));
         continue;
       }
-      w.reduced || ((s.g.rotation.y = t * 1.4 + s.ph), (s.g.children[0].position.y = Math.sin(t * 2.2 + s.ph) * 0.08), (s.g.children[1].position.y = s.g.children[0].position.y));
-      !F.dash && !a.play && Math.hypot(s.x - w.pos.x, s.z - w.pos.z) < 1.5 && rsFpCollect(a, s);
+      if (s.got) continue;
+      s.g && !w.reduced && ((s.g.rotation.y = t * 1.4 + s.ph), (s.g.children[0].position.y = Math.sin(t * 2.2 + s.ph) * 0.08), (s.g.children[1].position.y = s.g.children[0].position.y));
+      if (s.type === "open") !busy && near(s.x, s.z, 1.5) && rsFpCollect(a, s);
+      else if (s.type === "clue") {
+        if (!s.note) {
+          if (!busy && near(s.x, s.z, 1.5)) {
+            ((s.note = !0), s.g && (w.scene.remove(s.g), (s.g = null)));
+            try {
+              Ri.accept();
+            } catch {}
+            a.toast("撿到一張紙條！照上面寫的走，就能找到貼紙。", 3600);
+          }
+        } else {
+          // 在南側直道上：算離起跑線幾公尺
+          let on = w.pos.z < -17.4 && w.pos.z > -27.2 && w.pos.x < ln.south.start + 1.5 && w.pos.x > ln.south.xEast,
+            m = Math.max(0, ln.south.start - w.pos.x);
+          clueBox = `<span>📜 ${s.text}</span><b>${on ? `你離起跑線 ${Math.round(m)} 公尺` : "先走到司令臺前的起跑線"}</b>`;
+          if (on && !busy && Math.abs(m - s.n) <= 1.2) {
+            ((s.x = w.pos.x), (s.z = w.pos.z), (s.g = rsFpDisc(w, rsFpStickerTex(s.id), s.x, 1.25, s.z, s.gold)), (s.y0 = s.g.position.y), rsFpCollect(a, s));
+            clueBox = null;
+          }
+        }
+      }
+      // 藏起來的貼紙離多近（帽子會加大感應範圍）
+      s.type !== "open" && (senseD = Math.min(senseD, Math.hypot(s.x - w.pos.x, s.z - w.pos.z)));
     }
-    // 衝刺
-    let D = F.dash;
-    if (D) {
-      let now = performance.now(),
-        el = a.overlay.querySelector(".fp-dash");
-      if (D.phase === "count") {
-        let left = 3 - (now - D.t0) / 1e3;
-        if (left <= 0) ((D.phase = "run"), (D.t0 = now), (D.dist = 0), (D.px = w.pos.x), (D.pz = w.pos.z));
-        else el && (el.innerHTML = `<span>預備……</span><b>${Math.ceil(left)}</b>`);
-      } else if (D.phase === "run") {
-        let step = Math.hypot(w.pos.x - D.px, w.pos.z - D.pz);
-        (step < 3 && (D.dist += step), (D.px = w.pos.x), (D.pz = w.pos.z));
-        let left = 10 - (now - D.t0) / 1e3;
-        if (left <= 0) return rsFpDashEnd(a);
-        el && (el.innerHTML = `<span>已經跑了 ${Math.floor(D.dist)} 公尺</span><b>剩 ${left.toFixed(1)} 秒</b>`);
+    let pill = a.overlay.querySelector("#fp-pill");
+    pill && pill.classList.toggle("near", senseD < ((F.ab && F.ab.sense) || 5));
+    // 紙條的內容一直留在畫面上方
+    let cb = a.overlay.querySelector(".fp-dash");
+    clueBox && !busy ? (cb || ((cb = T("div", { class: "fp-dash", id: "fp-clue", role: "status" })), a.overlay.append(cb)), cb.dataset.h !== clueBox && ((cb.innerHTML = clueBox), (cb.dataset.h = clueBox))) : cb && cb.remove();
+    // 草叢、回收桶的動畫
+    for (let p of F.props) {
+      if (!p.g) continue;
+      if (p.kind === "bush") {
+        let k = p.at ? Math.max(0, 1 - (now - p.at) / 700) : 0,
+          idle = p.has && !p.done && !w.reduced ? Math.max(0, Math.sin(t * 0.9 + p.ph) - 0.55) * 2.2 : 0; // 有貼紙的那叢，每隔幾秒晃一下
+        ((p.g.rotation.z = Math.sin(t * 22) * 0.16 * k + Math.sin(t * 13) * 0.07 * idle), (p.g.scale.y = 1 + Math.sin(t * 17) * 0.05 * idle));
+      } else {
+        let k = p.at ? Math.min(1, (now - p.at) / 300) : 0;
+        p.g.userData.hinge.rotation.x = -1.25 * k;
       }
     }
-    // 走到挑戰站附近：出現按鈕
-    let near = !F.dash && !a.play && !Mi() && Math.hypot(w.pos.x - RS_FP_DASH_AT.x, w.pos.z - (RS_FP_DASH_AT.z + 1.6)) < 3.4,
-      btn = a.overlay.querySelector(".fp-near");
-    near && !btn
-      ? a.overlay.append(T("button", { type: "button", class: "btn primary fp-near", id: "fp-dash-go", onclick: qt(() => rsFpDashStart(a)) }, "▶ 10 秒衝刺挑戰"))
-      : !near && btn && btn.remove();
+    // 走到旁邊：出現可以做的事（一次一種）
+    let act = null;
+    if (!busy) {
+      let best = null,
+        bd = 1.9;
+      for (let p of F.props) {
+        if (p.done) continue;
+        let d = Math.hypot(p.x - w.pos.x, p.z - w.pos.z);
+        d < bd && ((bd = d), (best = p));
+      }
+      let st = F.spots.find((s) => s.type === "stage" && !s.got),
+        A = gt.stage,
+        zf = A.z + A.d / 2;
+      if (best) act = { id: "prop" + F.props.indexOf(best), btns: [[best.kind === "bush" ? "▶ 翻翻這叢草" : "▶ 打開回收桶", () => rsFpProp(a, best), "fp-prop-go"]] };
+      else if (st && Math.abs(w.pos.x - A.x) < A.w / 2 + 0.5 && w.pos.z > zf && w.pos.z < zf + 3.2) act = { id: "stage", btns: [["▶ 上司令臺拿貼紙", () => a.enterPlay(rsFpStageTg(st)), "fp-stage-go"]] };
+      else if (near(RS_FP_RACE_AT.x, RS_FP_RACE_AT.z + 1.6, 3.4))
+        act = {
+          id: "race",
+          btns: [
+            ["▶ 100 公尺賽跑", () => a.enterPlay(rsFpRaceTg(100)), "fp-race-100"],
+            ["▶ 400 公尺賽跑", () => a.enterPlay(rsFpRaceTg(400)), "fp-race-400"],
+          ],
+        };
+    }
+    let el = a.overlay.querySelector(".fp-near");
+    if (!act) el && el.remove();
+    else if (!el || el.dataset.id !== act.id) {
+      el && el.remove();
+      a.overlay.append(T("div", { class: "fp-near", "data-id": act.id }, ...act.btns.map(([txt, fn, id]) => T("button", { type: "button", class: "btn primary", id, onclick: qt(fn) }, txt))));
+    }
   }
 
   // ---------- 數學小題（挑戰結束後）：答對 ＋1 代幣，答錯只說明、不扣 ----------
@@ -38616,43 +39066,356 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
   }
   var rsFpNum = (v) => String(Math.round(v * 100) / 100);
 
-  // ---------- 10 秒衝刺 ----------
-  function rsFpDashStart(a) {
-    let F = a.free,
-      w = a.world;
-    if (F.dash || a.play) return;
-    (a.removeOverlay(".fp-near, .fp-dash"), (F.dash = { phase: "count", t0: performance.now(), dist: 0, px: w.pos.x, pz: w.pos.z }));
-    a.overlay.append(T("div", { class: "fp-dash", role: "status" }));
-    a.toast("數到 3 之後開始跑，10 秒內跑越遠越好！（可以按「跑」或把搖桿推到底）", 3200);
+  // ---------- 賽跑：100 公尺（半圈）、400 公尺（兩圈）；終點都在司令臺前的起跑線 ----------
+  // 跑道一圈 200 公尺。s＝從司令臺前那條線往跑步方向量的距離；r＝離跑道圓心的距離（第幾道）
+  function rsFpTrackPt(s, r) {
+    let L = ln.straightLength,
+      hx = L / 2,
+      R0 = ln.innerRadius + 0.3,
+      cur = Math.PI * R0,
+      x0 = ln.south.start,
+      a = x0 + hx,
+      u = ((s % 200) + 200) % 200;
+    if (u < a) return { x: x0 - u, z: -r };
+    u -= a;
+    if (u < cur) return { x: -hx - r * Math.sin(u / R0), z: -r * Math.cos(u / R0) };
+    u -= cur;
+    if (u < L) return { x: -hx + u, z: r };
+    u -= L;
+    if (u < cur) return { x: hx + r * Math.sin(u / R0), z: r * Math.cos(u / R0) };
+    u -= cur;
+    return { x: hx - u, z: -r };
   }
-  async function rsFpDashEnd(a) {
-    let F = a.free,
-      w = a.world,
-      D = F.dash,
-      m = Math.max(1, Math.round(D.dist)),
-      f = rsFpGet(F.code),
-      isBest = m > f.bestDash;
-    ((F.dash = null), a.removeOverlay(".fp-dash"), w.stop(), a.pointer.reset(), a.keys.clear());
-    (F.dashN++, (F.dashBest = Math.max(F.dashBest, m)), isBest && ((f.bestDash = m), rsFpSave(F.code, f)));
-    let pay = F.dashN <= RS_FP_QUIZ_CAP,
-      v = m / 10,
-      intro = `10 秒跑了 ${m} 公尺。` + (isBest ? "這是你的新紀錄！" : `你的最佳紀錄是 ${f.bestDash} 公尺。`) + (pay ? "" : "（這次自由活動的衝刺代幣已經拿完，還是可以挑戰自己的紀錄。）"),
-      steps = [
-        {
-          q: `你 10 秒跑了 ${m} 公尺。速率是每秒幾公尺？`,
-          options: rsFpOpts(rsFpNum(v), [rsFpNum(m * 10), rsFpNum(m), rsFpNum(m / 100)], [rsFpNum(m + 10), rsFpNum(m - 10 > 0 ? m - 10 : m + 20)]).map((o) => ({ t: `每秒 ${o.t} 公尺`, ok: o.ok })),
-          explain: `速率＝距離÷時間＝${m}÷10＝${rsFpNum(v)}，每秒 ${rsFpNum(v)} 公尺。`,
-        },
-        {
-          q: `照每秒 ${rsFpNum(v)} 公尺的速率，跑 20 秒可以跑幾公尺？`,
-          options: rsFpOpts(rsFpNum(m * 2), [rsFpNum(m + 20), rsFpNum(m / 2), rsFpNum(m * 20)], [rsFpNum(m * 2 + 10), rsFpNum(m + 2)]).map((o) => ({ t: `${o.t} 公尺`, ok: o.ok })),
-          explain: `距離＝速率×時間＝${rsFpNum(v)}×20＝${rsFpNum(m * 2)} 公尺。`,
-        },
-      ],
-      ok = await rsFpQuiz(a, "10 秒衝刺：算算看", intro, steps, pay);
-    if (!a.free) return;
-    ((F.quizN += steps.length), (F.quizOK += ok), rsFpLog(a), a.renderHud());
+  var rsFpLaneR = (lane) => ln.innerRadius + (lane - 0.5) * ln.laneWidth,
+    rsFpGcd = (x, y) => (y ? rsFpGcd(y, x % y) : x);
+  class PlRace extends PlBase {
+    constructor(w, tg, app) {
+      super(w, tg, app);
+      let F = app.free,
+        f = rsFpGet(F.code),
+        ab = rsFpAb(F.code),
+        is4 = tg.len === 400;
+      ((this.len = tg.len), (this.is4 = is4), (this.title = tg.name), (this.ab = ab), (this.F = F));
+      ((this.s0 = is4 ? 0 : 100), (this.base = (is4 ? 5.2 : 6.2) * (1 + ab.speed)));
+      ((this.lane = 3), (this.lat = rsFpLaneR(3)), (this.me = { s: 0, v: 0 }), (this.phase = "mark"), (this.pt = 0), (this.clock = 0));
+      ((this.boostT = 0), (this.boost = 0), (this.slowT = 0), (this.shieldT = 0), (this.bag = []), (this.slots = 1 + ab.slot), (this.sprint = null), (this.falseN = 0));
+      // 電腦同學：速度跟著自己的最佳紀錄調整（大約一半機會跑贏）；第一次用固定的時間
+      let best = is4 ? f.best400 : f.best100,
+        T0 = best ? (is4 ? [best - 2, best + 1.5, best + 5] : [best - 0.5, best + 0.35, best + 1.2]) : is4 ? [74, 78.5, 83] : [15.9, 16.9, 17.9],
+        me = app.session && app.session.attempt && app.session.attempt.avatar,
+        pid = (Ai.find((x) => x.id === me) || Ai[0]).kit,
+        pool = rsFpShuffle(CHAR_ORDER.filter((id) => id !== pid));
+      this.riv = RS_FP_RIVALS.map((name, i) => {
+        let ch = Nh(ic({ kit: pool[i % pool.length] })),
+          T = Math.max(is4 ? 62 : 13.5, T0[i] + (Math.random() - 0.5) * (is4 ? 2 : 0.5));
+        w.scene.add(ch);
+        return { name, ch, lane: is4 ? 5 + i : [2, 4, 5][i], vT: this.len / (T - 0.75), s: 0, v: 0, t: 0, react: 0.18 + Math.random() * 0.2, ph: Math.random() * 6 };
+      });
+      // 400 公尺：跑道上的道具和障礙（玩家在第 1～4 道之間換道）
+      this.things = [];
+      if (is4) {
+        let mk = (kind, s, lane) => {
+          let p = rsFpTrackPt(s, rsFpLaneR(lane)),
+            m;
+          if (kind === "cone") ((m = new ne(new Le(0.03, 0.2, 0.5, 12), Te(15752741))), (m.position.set(p.x, 0.27, p.z)));
+          else if (kind === "puddle") ((m = new ne(new sn(0.55, 20), new nt({ color: 5676252, transparent: !0, opacity: 0.85 }))), (m.rotation.x = -Math.PI / 2), m.position.set(p.x, 0.045, p.z));
+          else ((m = new ne(new sn(0.4, 24), new nt({ map: rsFpEmojiTex("it_" + kind, kind === "drink" ? "🧃" : "🛡️", "#2f6fd0", "#ffffff"), transparent: !0, side: _t, depthWrite: !1 }))), m.position.set(p.x, 1.0, p.z));
+          ((m.userData.noOutline = !0), w.scene.add(m), this.things.push({ kind, s, lane, m, used: !1 }));
+        };
+        for (let s = 28; s < 385; s += 22) {
+          let lanes = rsFpShuffle([1, 2, 3, 4]);
+          Math.random() < 0.5 ? mk(Math.random() < 0.6 ? "drink" : "shield", s, lanes[0]) : (mk(Math.random() < 0.5 ? "cone" : "puddle", s, lanes[0]), Math.random() < 0.45 && mk(Math.random() < 0.5 ? "cone" : "puddle", s + 3, lanes[1]));
+          Math.random() < 0.35 && mk(Math.random() < 0.5 ? "cone" : "puddle", s + 11, lanes[2]);
+        }
+      }
+      ((this.camK = 5), this.place(0, !0));
+      window.__fpRace = this; // 測試用
+    }
+    ui(u) {
+      this.u = u;
+      let me = T("i", { class: "me" }, "你"),
+        prog = T("div", { class: "fp-prog", "aria-hidden": "true" }, ...this.riv.map((r) => (r.dot = T("i", {}, r.name.slice(1)))), me);
+      ((this.dot = me), (this.stat = T("div", { class: "play-stat", id: "fp-race-stat", role: "status" }, `${this.len} 公尺`)), (this.banner = T("div", { class: "fp-banner", id: "fp-race-banner", role: "status" }, "各就各位")));
+      u.root.append(this.stat, prog, this.banner);
+      ((this.act = T("button", { type: "button", class: "fp-act", id: "fp-race-act" }, "起跑！")), this.act.addEventListener("pointerdown", (e) => (e.preventDefault(), this.action())));
+      ((this.timing = T("div", { class: "fp-timing", id: "fp-race-timing", style: { display: "none" } }, T("span", { class: "y" }), T("span", { class: "g" }), T("span", { class: "p" }))), u.bottom.append(this.timing, this.act));
+      if (this.is4) {
+        ((this.itemBtn = T("button", { type: "button", class: "fp-act item", id: "fp-race-item", style: { display: "none" }, disabled: !0 }, "道具")), this.itemBtn.addEventListener("pointerdown", (e) => (e.preventDefault(), this.useItem())), u.bottom.append(this.itemBtn));
+        let lb = (cls, id, txt, d, lbl) => {
+          let b = T("button", { type: "button", class: "fp-lane " + cls, id, "aria-label": lbl, style: { display: "none" } }, txt);
+          return (b.addEventListener("pointerdown", (e) => (e.preventDefault(), this.shift(d))), u.root.append(b), b);
+        };
+        this.laneBtns = [lb("l", "fp-race-left", "◀", -1, "往左換一道"), lb("r", "fp-race-right", "▶", 1, "往右換一道")];
+      }
+      u.layer.style.cursor = "default";
+      u.layer.onpointerdown = (e) => {
+        this.is4 && this.phase === "run" ? this.shift(e.clientX < this.w.w / 2 ? -1 : 1) : this.action();
+      };
+      this.app.playTip(this.is4 ? "聽到「砰！」就按「起跑」。跑的時候可以換道撿道具、閃障礙。" : "聽到「砰！」就按「起跑」，按得越快越好。太早按算搶跑，要重來。");
+    }
+    onKey(e, down) {
+      if (!down || e.repeat) return;
+      e.key === " " ? (e.preventDefault(), this.action()) : e.key === "ArrowLeft" ? this.shift(-1) : e.key === "ArrowRight" ? this.shift(1) : (e.key === "Enter" || e.key === "x") && this.useItem();
+    }
+    say(t, sub) {
+      this.banner.innerHTML = t + (sub ? `<small>${sub}</small>` : "");
+    }
+    // 「起跑」和「衝刺」是同一顆按鈕
+    action() {
+      if (this.phase === "set") {
+        // 搶跑：不處罰，重新預備
+        (this.falseN++, (this.phase = "mark"), (this.pt = 0), this.say("搶跑了！", "等聽到「砰！」再按"));
+        try {
+          Ri.soft();
+        } catch {}
+      } else if (this.phase === "gun") this.go(this.pt);
+      else if (this.phase === "run" && this.sprint && !this.sprint.done) {
+        let S = this.sprint,
+          d = Math.abs(S.p - 0.5);
+        S.done = !0;
+        d <= S.g ? ((this.boost = 0.18), (this.boostT = 4), this.say("完美衝刺！"), this.flash()) : d <= S.y ? ((this.boost = 0.08), (this.boostT = 4), this.say("衝刺！")) : this.say("沒按準", "下次等指針到綠色再按");
+        ((this.sayT = 1.2), (this.timing.style.display = "none"), (this.act.style.display = "none"));
+      }
+    }
+    flash() {
+      try {
+        Ri.star();
+      } catch {}
+    }
+    go(rt) {
+      let win = 0.3 + this.ab.start,
+        perfect = rt <= win;
+      ((this.phase = "run"), (this.react = rt), (this.perfect = perfect), (this.act.style.display = "none"));
+      perfect ? ((this.boost = 0.15), (this.boostT = 3), this.say("完美起跑！"), this.flash()) : this.say(rt > 0.9 ? "出發！" : "起跑！");
+      this.sayT = 1.1;
+      if (this.is4) (this.laneBtns.forEach((b) => (b.style.display = "")), (this.itemBtn.style.display = ""), this.app.playTip("按左右換道。撿到 🧃 能量飲或 🛡️ 護盾後，按「用道具」。"));
+      else this.app.playTip("跑到一半會出現衝刺條，指針到綠色時按「衝刺」。");
+    }
+    shift(d) {
+      if (this.phase !== "run" || !this.is4) return;
+      this.lane = Math.max(1, Math.min(4, this.lane + d));
+    }
+    useItem() {
+      if (this.phase !== "run" || !this.bag.length) return;
+      let k = this.bag.shift();
+      k === "drink" ? ((this.boost = 0.35), (this.boostT = 3 + this.ab.drink), this.say("能量飲！加速")) : ((this.shieldT = 12), this.say("護盾！", "可以擋一次障礙"));
+      ((this.sayT = 1.1), this.flash(), this.bagUi());
+    }
+    bagUi() {
+      let ic = { drink: "🧃", shield: "🛡️" };
+      this.itemBtn && ((this.itemBtn.disabled = !this.bag.length), (this.itemBtn.textContent = this.bag.length ? "用道具 " + this.bag.map((k) => ic[k]).join("") : "道具"));
+    }
+    // 把人放到跑道上（s＝已經跑的距離）
+    put(ch, s, r, e, v) {
+      let p = rsFpTrackPt(this.s0 + s, r),
+        q = rsFpTrackPt(this.s0 + s + 0.6, r),
+        yaw = Math.atan2(q.x - p.x, q.z - p.z);
+      (ch.position.set(p.x, 0, p.z), ch.rotation.set(0, yaw, 0), sc(ch, e, v > 0.3, 1, { speed: v }));
+      return { p, d: { x: Math.sin(yaw), z: Math.cos(yaw) } };
+    }
+    place(e, snap) {
+      let m = this.put(this.pl, this.me.s, this.lat, e, this.me.v);
+      for (let r of this.riv) this.put(r.ch, r.s, rsFpLaneR(r.lane), e, r.v);
+      let { p, d } = m,
+        back = this.phase === "run" || this.phase === "after" ? 5.6 : 4.4;
+      this.cam(plV(p.x - d.x * back, 2.9, p.z - d.z * back), plV(p.x + d.x * 5, 1.0, p.z + d.z * 5), e, snap);
+      return m;
+    }
+    update(e0) {
+      let e = Math.min(e0, 0.1),
+        M = this.me;
+      this.pt += e;
+      if (this.phase === "mark") {
+        this.pt > 1.3 && ((this.phase = "set"), (this.pt = 0), (this.setFor = 1.2 + Math.random() * 1.4), this.say("預備……"));
+        this.pt > 0.9 && this.pt < 1.3 && this.say("各就各位");
+      } else if (this.phase === "set") {
+        if (this.pt > this.setFor) {
+          ((this.phase = "gun"), (this.pt = 0), (this.clock = 0), this.say("砰！"));
+          try {
+            Ri.accept();
+          } catch {}
+        }
+      } else if (this.phase === "gun") {
+        this.clock += e;
+        this.pt > 1.4 && this.go(this.pt); // 一直沒按：自動出發（慢一點而已）
+      }
+      let running = this.phase === "gun" || this.phase === "run" || this.phase === "after";
+      if (running) {
+        this.phase !== "gun" && (this.clock += e);
+        for (let r of this.riv) {
+          if (r.t) {
+            r.v += (0 - r.v) * Math.min(1, e * 2.5);
+            r.s += r.v * e;
+            continue;
+          }
+          let tgt = this.clock > r.react ? r.vT * (1 + 0.03 * Math.sin(this.clock * 0.7 + r.ph)) : 0;
+          ((r.v += (tgt - r.v) * Math.min(1, e * 1.4)), (r.s += r.v * e));
+          r.s >= this.len && (r.t = this.clock - (r.s - this.len) / Math.max(r.v, 0.1));
+        }
+      }
+      if (this.phase === "run") {
+        this.boostT > 0 && ((this.boostT -= e), this.boostT <= 0 && (this.boost = 0));
+        (this.slowT > 0 && (this.slowT -= e), this.shieldT > 0 && (this.shieldT -= e));
+        let tgt = this.base * (1 + this.boost) * (this.slowT > 0 ? 0.55 : 1);
+        ((M.v += (tgt - M.v) * Math.min(1, e * 1.4)), (M.s += M.v * e));
+        this.lat += (rsFpLaneR(this.lane) - this.lat) * Math.min(1, e * 9);
+        // 100 公尺：中段的衝刺時機
+        if (!this.is4) {
+          if (!this.sprint && M.s > 40) {
+            ((this.sprint = { p: 0, g: 0.09 + this.ab.timing, y: 0.22 + this.ab.timing, done: !1 }), (this.timing.style.display = ""), (this.act.style.display = ""), (this.act.textContent = "衝刺！"));
+            let S = this.sprint,
+              [y, g] = this.timing.children;
+            ((y.style.left = (0.5 - S.y) * 100 + "%"), (y.style.width = S.y * 200 + "%"), (g.style.left = (0.5 - S.g) * 100 + "%"), (g.style.width = S.g * 200 + "%"));
+          }
+          if (this.sprint && !this.sprint.done) {
+            this.sprint.p = (M.s - 40) / 26;
+            this.timing.children[2].style.left = Math.min(100, this.sprint.p * 100) + "%";
+            this.sprint.p > 1 && ((this.sprint.done = !0), (this.timing.style.display = "none"), (this.act.style.display = "none"));
+          }
+        }
+        // 400 公尺：撿道具、踩到障礙
+        for (let t of this.things) {
+          if (t.used || Math.abs(t.s - M.s) > 0.9 || Math.abs(rsFpLaneR(t.lane) - this.lat) > 0.62) continue;
+          if (t.kind === "drink" || t.kind === "shield") {
+            if (this.bag.length >= this.slots) continue; // 袋子滿了，撿不起來
+            ((t.used = !0), (t.m.visible = !1), this.bag.push(t.kind), this.bagUi(), this.say(t.kind === "drink" ? "撿到能量飲 🧃" : "撿到護盾 🛡️"), (this.sayT = 0.9));
+            try {
+              Ri.accept();
+            } catch {}
+          } else {
+            t.used = !0;
+            if (this.shieldT > 0) ((this.shieldT = 0), this.say("護盾擋住了！"), (this.sayT = 0.9));
+            else {
+              ((this.slowT = 1.6), (this.boost = 0), (this.boostT = 0), this.say(t.kind === "cone" ? "撞到角錐！" : "踩到水坑！"), (this.sayT = 0.9));
+              try {
+                Ri.soft();
+              } catch {}
+            }
+          }
+        }
+        if (M.s >= this.len) {
+          ((this.time = this.clock - (M.s - this.len) / Math.max(M.v, 0.1)), (this.phase = "after"), (this.pt = 0));
+          (this.act.style.display = "none"), (this.timing.style.display = "none"), this.is4 && (this.laneBtns.forEach((b) => (b.style.display = "none")), (this.itemBtn.style.display = "none"));
+          this.say("到終點了！", `${this.time.toFixed(1)} 秒`);
+          this.flash();
+        }
+      } else if (this.phase === "after") {
+        ((M.v += (0 - M.v) * Math.min(1, e * 2.2)), (M.s += M.v * e));
+        this.pt > 1.8 && ((this.phase = "done"), this.finish());
+      }
+      this.sayT > 0 && ((this.sayT -= e), this.sayT <= 0 && this.phase === "run" && this.say(""));
+      let m = this.place(e);
+      // 道具面向鏡頭
+      for (let t of this.things) (t.kind === "drink" || t.kind === "shield") && !t.used && t.m.quaternion.copy(this.w.camera.quaternion);
+      rsFpTrail(this.app, e, m.p.x, 0, m.p.z, M.v > 1);
+      // 進度條、文字
+      let pc = (s) => Math.max(0, Math.min(100, (s / this.len) * 100)) + "%";
+      this.dot.style.left = pc(M.s);
+      for (let r of this.riv) r.dot.style.left = pc(r.s);
+      (this.phase === "run" || this.phase === "gun") &&
+        (this.stat.textContent = `${this.len} 公尺｜跑了 ${Math.min(this.len, Math.floor(M.s))} 公尺｜${this.clock.toFixed(1)} 秒` + (this.shieldT > 0 ? "｜🛡️" : "") + (this.boostT > 0 ? "｜加速中" : "") + (this.slowT > 0 ? "｜變慢了" : ""));
+    }
+    async finish() {
+      let a = this.app,
+        F = this.F,
+        len = this.len,
+        is4 = this.is4,
+        time = Math.round(this.time * 10) / 10,
+        key = is4 ? "best400" : "best100";
+      if (a.free !== F) return;
+      // 名次：比到終點的時間（還沒到的電腦同學用目前速度估）
+      let all = this.riv.map((r) => ({ name: r.name, t: Math.round((r.t || this.clock + (len - r.s) / Math.max(r.vT, 0.1)) * 10) / 10 })).concat([{ name: "你", t: time, me: !0 }]).sort((x, y) => x.t - y.t || (x.me ? -1 : 1)),
+        rank = all.findIndex((x) => x.me) + 1,
+        f = rsFpGet(F.code),
+        isBest = !f[key] || time < f[key];
+      (F.raceN++, is4 ? (F.r400N++, (F.r400Best = F.r400Best ? Math.min(F.r400Best, time) : time)) : (F.r100N++, (F.r100Best = F.r100Best ? Math.min(F.r100Best, time) : time)));
+      isBest && ((f[key] = time), rsFpSave(F.code, f));
+      this.result = { time, rank, all, perfect: !!this.perfect, react: this.react };
+      let pay = (is4 ? F.r400N : F.r100N) <= RS_FP_QUIZ_CAP,
+        intro = T(
+          "div",
+          {},
+          T("div", {}, `你跑了 ${time.toFixed(1)} 秒，第 ${rank} 名（共 4 人）。` + (isBest ? "這是你的新紀錄！" : `你的最佳紀錄是 ${f[key].toFixed(1)} 秒。`)),
+          T("ol", { class: "fp-rank", id: "fp-race-rank" }, ...all.map((x, i) => T("li", { class: x.me ? "me" : "" }, T("span", {}, `第 ${i + 1} 名`), T("span", {}, x.name), T("span", {}, `${x.t.toFixed(1)} 秒`)))),
+          pay ? null : T("div", {}, `（這次自由活動的 ${len} 公尺代幣已經拿完，還是可以挑戰自己的紀錄。）`),
+        ),
+        steps;
+      if (is4) {
+        let T4 = Math.max(4, Math.round(time / 4) * 4),
+          p = T4 / 4;
+        steps = [
+          {
+            q: `你跑 400 公尺大約花了 ${T4} 秒。平均每 100 公尺花幾秒？`,
+            options: rsFpOpts(String(p), [String(T4 * 4), String(T4 / 2), String(T4 - 100 > 0 ? T4 - 100 : p + 4)], [String(p + 2), String(T4)]).map((o) => ({ t: `${o.t} 秒`, ok: o.ok })),
+            explain: `400 公尺有 4 個 100 公尺，${T4}÷4＝${p}，平均每 100 公尺 ${p} 秒。`,
+          },
+          {
+            q: `照這個速率（每 100 公尺 ${p} 秒），跑 1000 公尺要幾秒？`,
+            options: rsFpOpts(String(p * 10), [String(p * 100), String(p + 1000), String(p * 5)], [String(p * 10 + 10), String(p * 20)]).map((o) => ({ t: `${o.t} 秒`, ok: o.ok })),
+            explain: `1000 公尺有 10 個 100 公尺，${p}×10＝${p * 10} 秒。`,
+          },
+        ];
+      } else {
+        let T1 = Math.max(1, Math.round(time)),
+          rv = all.filter((x) => !x.me).map((x) => ({ name: x.name, t: Math.max(1, Math.round(x.t)) })),
+          R = rv.find((x) => x.t !== T1) || { name: rv[0].name, t: T1 + 1 },
+          g = rsFpGcd(T1, R.t),
+          rr = (x, y) => `${x}：${y}`;
+        steps = [
+          {
+            q: `你跑 100 公尺大約花了 ${T1} 秒。速率（每秒跑幾公尺）要怎麼算？`,
+            options: rsFpOpts(`100÷${T1}`, [`${T1}÷100`, `100×${T1}`, `100－${T1}`], []),
+            explain: `速率＝距離÷時間＝100÷${T1}，大約是每秒 ${(100 / T1).toFixed(1)} 公尺。`,
+          },
+          g > 1
+            ? {
+                q: `你大約 ${T1} 秒，${R.name}大約 ${R.t} 秒。「你的時間」對「${R.name}的時間」的比，化成最簡單的整數比是多少？`,
+                options: rsFpOpts(rr(T1 / g, R.t / g), [rr(R.t / g, T1 / g), rr(T1 / g, R.t), rr(T1, R.t / g)], [rr(T1 / g + 1, R.t / g), rr(1, R.t / g), rr(T1 / g, R.t / g + 1)]),
+                explain: `${rr(T1, R.t)}，前項和後項同時除以 ${g}，得到 ${rr(T1 / g, R.t / g)}。`,
+              }
+            : {
+                q: `你大約 ${T1} 秒，${R.name}大約 ${R.t} 秒。「你的時間」對「${R.name}的時間」的比，要怎麼記？`,
+                options: rsFpOpts(rr(T1, R.t), [rr(R.t, T1), rr(T1, 100), rr(100, T1)], [rr(R.t, 100), rr(T1 + 1, R.t)]),
+                explain: `前項是你的時間 ${T1}，後項是${R.name}的時間 ${R.t}，記作 ${rr(T1, R.t)}。`,
+              },
+        ];
+      }
+      let ok = await rsFpQuiz(a, `${len} 公尺賽跑：算算看`, intro, steps, pay);
+      if (a.free !== F) return;
+      ((F.quizN += steps.length), (F.quizOK += ok), rsFpLog(a));
+      a.play === this && a.exitPlay();
+    }
+    dispose() {
+      super.dispose();
+      for (let r of this.riv) this.w.scene.remove(r.ch);
+      for (let t of this.things) this.w.scene.remove(t.m);
+      window.__fpRace === this && (window.__fpRace = null);
+    }
   }
+  // 上司令臺拿貼紙（司令臺平常走不上去）
+  class PlStage extends PlBase {
+    constructor(w, tg, app) {
+      super(w, tg, app);
+      let A = gt.stage;
+      ((this.title = "司令臺"), (this.from = this.pl.position.clone()), (this.to = plV(tg.spot.x - 0.75, A.h, tg.spot.z + 0.35)), (this.camK = 3));
+      this.zf = A.z + A.d / 2;
+    }
+    ui() {
+      this.app.playTip("爬上司令臺……");
+    }
+    update(e) {
+      this.t += e;
+      let k = Math.min(1, this.t / 0.9),
+        p = this.from.clone().lerp(this.to, k);
+      ((p.y += Math.sin(k * Math.PI) * 0.45), this.pl.position.copy(p), this.pl.rotation.set(0, k < 1 ? Math.PI : 0, 0), sc(this.pl, e, k < 1, 1, { speed: 2.2 }));
+      this.cam(plV(this.to.x + 2.6, 3.1, this.zf + 6.2), plV(this.to.x, 1.9, this.to.z), e);
+      k >= 1 && !this.got && ((this.got = !0), rsFpCollect(this.app, this.tg.spot, !0));
+      this.t > 3 && !this.out && ((this.out = !0), setTimeout(() => this.app.play === this && this.app.exitPlay(), 0));
+    }
+  }
+  ((PL_GAMES.race = PlRace), (PL_GAMES.fpstage = PlStage));
+  window.__fpRaceFinish = PlRace.prototype.finish; // 測試用
+
   // ---------- 投 10 球（在投籃小遊戲裡按「挑戰：投 10 球」開始；投完由這裡出題） ----------
   async function rsFpHoopEnd(a, made) {
     let F = a.free;
@@ -38687,14 +39450,14 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     let f = rsFpGet(a.free.code),
       have = Object.keys(f.stickers).length,
       grid = T("div", { class: "fp-grid", id: "fp-album-grid" });
-    for (let [id, e, name] of RS_FP_STICKERS) {
+    for (let [id, e, name, gold] of RS_FP_STICKERS) {
       let n = f.stickers[id] || 0;
       grid.append(
-        T("div", { class: "fp-st" + (n ? " has" : ""), "data-id": id, "aria-label": n ? `${name}，${n} 張` : "還沒找到" }, T("span", { class: "e", "aria-hidden": "true" }, n ? e : "？"), T("span", {}, n ? name : "還沒找到"), n > 1 ? T("span", { class: "x" }, `×${n}`) : null),
+        T("div", { class: "fp-st" + (n ? " has" : "") + (gold ? " gold" : ""), "data-id": id, "aria-label": n ? `${name}，${n} 張` : "還沒找到" }, T("span", { class: "e", "aria-hidden": "true" }, n ? e : "？"), T("span", {}, n ? name : gold ? "金色？" : "還沒找到"), n > 1 ? T("span", { class: "x" }, `×${n}`) : null),
       );
     }
     let dlg,
-      body = T("div", {}, T("h2", {}, "貼紙圖鑑"), T("p", { id: "fp-album-count" }, `已經收集 ${have}／${RS_FP_STICKERS.length} 種。每完成一個小節，操場上會再藏 ${RS_FP_COUNT} 張。`), grid, T("div", { class: "row" }, T("button", { type: "button", class: "btn primary", id: "fp-album-close", "data-autofocus": !0, onclick: () => dlg.close() }, "關閉")));
+      body = T("div", {}, T("h2", {}, "貼紙圖鑑"), T("p", { id: "fp-album-count" }, `已經收集 ${have}／${RS_FP_STICKERS.length} 種（後面 12 種是金色的，藏在要動手找的地方）。每完成一個小節，操場上會再藏 ${RS_FP_COUNT} 張。`), grid, T("div", { class: "row" }, T("button", { type: "button", class: "btn primary", id: "fp-album-close", "data-autofocus": !0, onclick: () => dlg.close() }, "關閉")));
     dlg = Qn(body, { wide: !0, label: "貼紙圖鑑" });
   }
 
@@ -38713,7 +39476,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       dlg,
       apply = () => {
         let cos = rsFpCos(F.code);
-        (w.setAvatar(av.id, cos), api && api.show(av.id, cos));
+        (w.setAvatar(av.id, cos), api && api.show(av.id, cos), rsFpApplyAb(a));
       },
       render = () => {
         let f = rsFpGet(F.code);
@@ -38735,7 +39498,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
               else (delete g.wear[cat], (msg.textContent = `脫下「${it.name}」。`));
               (rsFpSave(F.code, g), rsFpLog(a), render(), apply(), rsFpHudCoins(a));
             });
-            list.append(T("div", { class: "fp-item" + (on ? " on" : ""), "data-id": it.id }, T("span", { class: "sw", style: it.sw ? { background: it.sw } : null, "aria-hidden": "true" }, it.badge || ""), T("span", { class: "nm" }, it.name), b));
+            list.append(T("div", { class: "fp-item" + (on ? " on" : ""), "data-id": it.id }, T("span", { class: "sw", style: it.sw ? { background: it.sw } : null, "aria-hidden": "true" }, it.badge || it.fx || ""), T("span", { class: "nm" }, it.name, it.ab ? T("small", {}, rsFpAbText(it.ab)) : null), b));
           }
         }
       },
@@ -38743,7 +39506,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
         "div",
         {},
         T("h2", {}, "換造型"),
-        T("p", {}, coins, "　買過的可以隨時穿上或脫下。"),
+        T("p", {}, coins, "　買過的可以隨時穿上或脫下。有些造型帶一點能力，只在自由活動有用。"),
         T("div", { class: "fp-shop" }, stage, list),
         msg,
         T("div", { class: "row" }, T("button", { type: "button", class: "btn primary", id: "fp-shop-close", "data-autofocus": !0, onclick: () => (api && api.dispose(), dlg.close()) }, "關閉")),
@@ -38757,7 +39520,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     api || (stage.style.display = "none");
   }
   window.__fpHoop = rsFpHoopEnd; // 測試用
-  window.__rsFp = { get: rsFpGet, save: rsFpSave, items: RS_FP_ITEMS, stickers: RS_FP_STICKERS, spots: RS_FP_SPOTS, cos: rsFpCos, merge: rsFpMerge, dashAt: RS_FP_DASH_AT, start: rsFpStart, end: rsFpEnd, taskCoin: rsFpTaskCoin, on: rsFpOn }; // 測試用
+  window.__rsFp = { get: rsFpGet, save: rsFpSave, items: RS_FP_ITEMS, cats: RS_FP_CATS, stickers: RS_FP_STICKERS, spots: RS_FP_SPOTS, cos: rsFpCos, ab: rsFpAb, merge: rsFpMerge, raceAt: RS_FP_RACE_AT, trackPt: rsFpTrackPt, laneR: rsFpLaneR, start: rsFpStart, end: rsFpEnd, taskCoin: rsFpTaskCoin, on: rsFpOn, collect: rsFpCollect }; // 測試用
   // ===== v0.8.5：人物配件（眼鏡、背包、玩偶、計算機、斜背水壺、助聽器、頸掛風扇、鉛筆） =====
   function avAccessories(s, n, r, m, A, R) {
     let has = (k) => (s.acc || []).includes(k),
@@ -40352,7 +41115,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
         let n = 0,
           i = 0,
           runOn = rsRunning() || (this.joy && this.joy.run),
-          r = ut.walkSpeed * (runOn ? RS_MOVE.run : 1),
+          r = ut.walkSpeed * (runOn ? RS_MOVE.run : 1) * (this.speedMul || 1), // v3.3.0：自由活動穿鞋子的加成（練習時 speedMul 是 1）
           a = this.joy || this.keyVec,
           manual = !1;
         if (a) {
