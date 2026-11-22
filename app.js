@@ -19,7 +19,7 @@
   var RS_MOVE = { walk: 5, run: 1.7, accel: 10, decel: 14, turn: 12, maxTurn: 14, dead: 0.12, minJoy: 0.35, stride: 1.3 };
   var ut = {
     name: "操場中的數學",
-    appVersion: "3.3.0",
+    appVersion: "3.4.0",
     teacherPassword: "8642",
     questionsPerSession: 9,
     questionsPerSessionOptions: [8, 9, 10],
@@ -728,7 +728,7 @@
         t.focus && t.focus.length && (rsMarkKeys(d.querySelector("#q-context .qtext"), t.focus), t.silent || d.querySelector("#q-context .qtext").append(T("span", { class: "rs-focus-note" }, "▲ 標出來的是這一步要注意的條件"))),
         i.op && d.append(i.op.el),
         r.diagram && !(n.section && r.level === "basic" && r.typeId === "T9") && d.append(this.partsDiagram(r.diagram)),
-        r.figure && d.append(rsFigure(r.figure)),
+        r.figure && d.append(rsFigure(a && a.hl ? { ...r.figure, hl: a.hl } : r.figure)),
         // v2.4.0：第六單元每題都說明圓周率用 3.14
         /^S\d/.test(r.typeId || "") && d.append(T("p", { class: "rs-pi" }, "圓周率用 3.14")),
         r.equation && d.append(this.equationBox(r.equation)),
@@ -773,7 +773,7 @@
             )
           : a.kind === "choice"
             ? d.append(this.choices(a))
-            : d.append(this.numberInput(a)));
+            : (d.append(this.numberInput(a)), a.card314 && /^S\d/.test(r.typeId || "") && d.append(rs6Card())));
       let u = T("div", { "aria-live": "polite" });
       (t.feedback &&
         (t.feedback.kind === "right"
@@ -888,7 +888,7 @@
                 T("button", { type: "button", class: "btn primary", id: "btn-submit", onclick: qt(() => this.submit()) }, "確認答案"),
               ));
       }
-      (this.root.append(h, d, g),
+      (this.root.append(h, rsPipCols(d), g),
         (d.scrollTop = l),
         t.feedback &&
           t.scrollFeedback &&
@@ -6732,12 +6732,35 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       u = f.u || "公尺";
     if (f.kind === "sector") {
       let a = f.a,
-        R = a > 180 ? 88 : a > 90 ? 100 : 150,
-        cx = a > 180 ? 160 : a > 90 ? 160 : 70,
-        cy = a > 180 ? 112 : a > 90 ? 175 : 185,
+        whole = a > 180 || f.hl === "frac", // v3.4.0：問「幾分之幾」時，整個圓都畫出來
+        R = whole ? 88 : a > 90 ? 100 : 150,
+        cx = whole ? 160 : a > 90 ? 160 : 70,
+        cy = whole ? 108 : a > 90 ? 175 : 185,
         a0 = a > 180 ? 90 : 0;
-      (a > 180 || a <= 90) && path(rsArcPath(cx, cy, R, 0, 360), "none", { dash: !0, w: 1.5, stroke: "#9aa38c" });
-      path(rsArcPath(cx, cy, R, a0, a0 + a), C.fill);
+      (a > 180 || a <= 90 || f.hl === "frac") && path(rsArcPath(cx, cy, R, 0, 360), "none", { dash: !0, w: 1.5, stroke: "#9aa38c" });
+      path(rsArcPath(cx, cy, R, a0, a0 + a), f.hl === "area" ? "#6fbf6a" : C.fill);
+      // v3.4.0：跟著步驟標出要看的地方
+      let P = (deg) => [cx + R * Math.cos((deg * Math.PI) / 180), cy - R * Math.sin((deg * Math.PI) / 180)];
+      if (f.hl === "frac") {
+        let g = (x, y) => (y ? g(y, x % y) : x),
+          q = 360 / g(a, 360);
+        if (q <= 12)
+          for (let k = 0; k < q; k++) {
+            let [x, y] = P(a0 + (k * 360) / q);
+            out.push(`<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="#7d8a6e" stroke-width="1.5" stroke-dasharray="5 4"/>`);
+          }
+      }
+      if (f.hl === "arc" || f.hl === "per") {
+        let [x0, y0] = P(a0),
+          [x1, y1] = P(a0 + a);
+        out.push(`<path d="M ${x0} ${y0} A ${R} ${R} 0 ${a > 180 ? 1 : 0} 0 ${x1} ${y1}" fill="none" stroke="#2f6fd0" stroke-width="7" stroke-linecap="round"/>`);
+      }
+      if (f.hl === "per" || f.hl === "radius" || f.hl === "arc") {
+        let [x0, y0] = P(a0),
+          [x1, y1] = P(a0 + a);
+        out.push(`<line x1="${cx}" y1="${cy}" x2="${x0}" y2="${y0}" stroke="#c0392b" stroke-width="${f.hl === "arc" ? 3 : 6}" stroke-linecap="round"/>`);
+        f.hl !== "arc" && out.push(`<line x1="${cx}" y1="${cy}" x2="${x1}" y2="${y1}" stroke="#c0392b" stroke-width="6" stroke-linecap="round"/>`);
+      }
       let mid = ((a0 + a / 2) * Math.PI) / 180;
       txt(cx + 26 * Math.cos(mid), cy - 26 * Math.sin(mid), `${a}°`, { color: C.red });
       let ra = (a0 * Math.PI) / 180;
@@ -6794,8 +6817,32 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     }
     return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:340px;display:block;margin:0 auto" role="img" aria-label="題目圖形">${out.join("")}</svg>`;
   }
+  // v3.4.0：圖下面的一句話（跟著步驟）
+  function rsFigCap(f) {
+    let g = (x, y) => (y ? g(y, x % y) : x);
+    if (f.kind === "sector") {
+      let a = f.a,
+        q = 360 / g(a, 360),
+        p = a / g(a, 360);
+      if (f.hl === "frac") return q <= 12 ? `整個圓切成 ${q} 塊一樣大的，塗色的是 ${p} 塊` : `塗色的部分占整個圓的 ${a}°／360°`;
+      if (f.hl === "arc") return "藍色的彎線是弧；紅色是半徑，直徑＝半徑×2";
+      if (f.hl === "per") return "沿著邊走一圈：藍色的弧＋兩條紅色的半徑";
+      if (f.hl === "area") return "要算的是塗色的這一整塊（面積）";
+      if (f.hl === "radius") return "紅色的線是半徑";
+      return "";
+    }
+    if (f.kind === "corner") return f.hl === "frac" || f.hl === "parts" ? "牆（建物）擋住 1 塊 90°，澆得到的是另外 3 塊 90°" : "";
+    if (f.kind === "stadium") return f.hl === "parts" ? ((f.n || 2) === 2 ? "中間是長方形；兩邊的半圓合起來是一個整圓" : "左邊是長方形，右邊是半圓") : "";
+    if (f.kind === "sqq") return f.hl === "parts" ? "橘色的部分＝整個正方形－綠色的 1/4 圓" : "";
+    if (f.kind === "seg") return f.hl === "parts" ? "橘色的弧形＝1/4 圓－綠色的三角形" : "";
+    if (f.kind === "leaf") return f.hl === "parts" ? "葉子＝正方形－葉子外面的兩塊白色" : "";
+    return "";
+  }
   function rsFigure(f) {
-    return T("div", { class: "rs-fig", html: rsFigSvg(f) });
+    let el = T("div", { class: "rs-fig", html: rsFigSvg(f) }),
+      cap = f.hl ? rsFigCap(f) : "";
+    cap && el.append(T("p", { class: "rs-figcap", id: "rs-figcap" }, cap));
+    return el;
   }
   // 3D：在道具區地上鋪出同樣的形狀（尺寸縮放成 4.8×2.6 公尺以內）
   function rsShapes(s, t, e) {
@@ -7581,6 +7628,237 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     document.head.append(st);
   })();
 
+  // ===================== v3.4.0：第六單元三層提示改寫、圖形跟著步驟、×3.14 小卡 =====================
+  // 老師 11/20 觀察：「三層提示不夠明確，點到最後一層仍然不懂怎麼算」。11/21 老師同意第 3 層算到「答案的前一步」。
+  // 題目、答案、選項、步驟都不動（題庫檔 06 不改，版本號不變）；只在出題後換掉 hints、加上 hl（圖形要亮哪裡）。
+  //   數字題：第 1 層＝原本第 1 層；第 2 層＝原本第 2 層＋完整算式；第 3 層＝一步一步算，只留最後一個 □
+  //   選擇題：第 1、2 層不變；第 3 層＝原本第 3 層＋「先刪掉兩個」（錯的選項和原因）
+  var RS6H_N = (x) => qe(Math.round(x * 1e6) / 1e6);
+  // ---------- 算式：拆成記號 ----------
+  function rs6hTok(s) {
+    let out = [],
+      re = /\[f:(\d+)\/(\d+)\]|(\d+(?:\.\d+)?)|([×÷＋－])/g,
+      m,
+      last = 0;
+    while ((m = re.exec(s))) {
+      if (s.slice(last, m.index).trim()) return null; // 中間夾了文字：不是純算式
+      last = re.lastIndex;
+      m[1] ? out.push({ v: +m[1] / +m[2], f: [+m[1], +m[2]] }) : m[3] ? out.push({ v: +m[3] }) : out.push({ op: m[4] });
+    }
+    if (s.slice(last).trim()) return null;
+    // 要是「數 op 數 op 數 …」
+    if (!out.length || out.length % 2 === 0) return null;
+    for (let i = 0; i < out.length; i++) if (i % 2 ? !out[i].op : out[i].op) return null;
+    return out;
+  }
+  var rs6hShow = (t) => (t.f ? `[f:${t.f[0]}/${t.f[1]}]` : RS6H_N(t.v));
+  // ---------- 一步一步算（先乘除、後加減；3.14 留到同一串乘法的最後；乘分數拆成 ÷分母、×分子） ----------
+  function rs6hSteps(tok) {
+    // 先把乘除串分組
+    let groups = [[tok[0]]],
+      addops = [];
+    for (let i = 1; i < tok.length; i += 2) {
+      let op = tok[i].op,
+        n = tok[i + 1];
+      op === "×" || op === "÷" ? groups[groups.length - 1].push({ op }, n) : (addops.push(op), groups.push([n]));
+    }
+    let steps = [],
+      vals = [];
+    for (let g of groups) {
+      // 乘法串：把 ×3.14 移到最後（只有全部都是 × 才移）
+      let allMul = g.every((t, i) => i % 2 === 0 || t.op === "×");
+      if (allMul && g.length > 1) {
+        let nums = g.filter((t, i) => i % 2 === 0),
+          pi = nums.filter((t) => !t.f && Math.abs(t.v - 3.14) < 1e-9),
+          rest = nums.filter((t) => !(!t.f && Math.abs(t.v - 3.14) < 1e-9));
+        if (pi.length === 1 && rest.length) {
+          g = [];
+          rest.concat(pi).forEach((t, i) => (i && g.push({ op: "×" }), g.push(t)));
+        }
+      }
+      let cur = g[0];
+      for (let i = 1; i < g.length; i += 2) {
+        let op = g[i].op,
+          n = g[i + 1];
+        if (op === "×" && n.f) {
+          // 乘分數：先 ÷分母，再 ×分子
+          let t1 = { v: cur.v / n.f[1] };
+          steps.push({ a: cur, op: "÷", b: { v: n.f[1] }, r: t1 });
+          cur = t1;
+          if (n.f[0] !== 1) {
+            let t2 = { v: cur.v * n.f[0] };
+            steps.push({ a: cur, op: "×", b: { v: n.f[0] }, r: t2 });
+            cur = t2;
+          }
+          continue;
+        }
+        let r = { v: op === "×" ? cur.v * n.v : cur.v / n.v };
+        steps.push({ a: cur, op, b: n, r });
+        cur = r;
+      }
+      vals.push(cur);
+    }
+    let acc = vals[0];
+    for (let i = 0; i < addops.length; i++) {
+      let op = addops[i],
+        n = vals[i + 1],
+        r = { v: op === "＋" ? acc.v + n.v : acc.v - n.v };
+      steps.push({ a: acc, op, b: n, r });
+      acc = r;
+    }
+    return { steps, value: Math.round(acc.v * 1e6) / 1e6 };
+  }
+  // ---------- 最後一步的小幫忙 ----------
+  var rs6hDec = (x) => (String(RS6H_N(x)).split(".")[1] || "").length;
+  function rs6hPad(x, d) {
+    let s = RS6H_N(x);
+    if (!d) return s;
+    let [i, f = ""] = s.split(".");
+    return i + "." + f.padEnd(d, "0");
+  }
+  // x×3.14：照位值拆開
+  function rs6hPi(x) {
+    x = Math.round(x * 1e6) / 1e6;
+    let ip = Math.floor(x + 1e-9),
+      fp = Math.round((x - ip) * 1e6) / 1e6,
+      parts = [];
+    for (let p of [1000, 100, 10, 1]) {
+      let d = Math.floor((ip % (p * 10)) / p);
+      d && parts.push(d * p);
+    }
+    fp && parts.push(fp);
+    if (parts.length === 1) {
+      let v = parts[0];
+      if (v >= 1 && v <= 9) return `${v}×3.14：${v}×3＝${v * 3}，${v}×0.14＝${RS6H_N(v * 0.14)}，${v * 3}＋${RS6H_N(v * 0.14)}＝□`;
+      if (v >= 10 && Number.isInteger(v)) {
+        let k = String(v).length - 1,
+          d = v / 10 ** k;
+        return `${RS6H_N(v)}×3.14：先算 ${d}×3.14＝${RS6H_N(d * 3.14)}（看 ×3.14 小卡），再乘以 ${10 ** k}，小數點往右移 ${k} 位＝□`;
+      }
+      return `${RS6H_N(v)}×3.14：可以想成 3.14÷${RS6H_N(1 / v)}（看 ×3.14 小卡）＝□`;
+    }
+    let ps = parts.map((v) => `${RS6H_N(v)}×3.14＝${RS6H_N(v * 3.14)}`);
+    return `${RS6H_N(x)}×3.14：拆成 ${parts.map(RS6H_N).join("＋")}，${ps.join("、")}，再加起來：${parts.map((v) => RS6H_N(v * 3.14)).join("＋")}＝□`;
+  }
+  function rs6hLast(s) {
+    let A = s.a.v,
+      B = s.b.v,
+      head = `${rs6hShow(s.a)}${s.op}${rs6hShow(s.b)}`;
+    if (s.op === "×" && Math.abs(B - 3.14) < 1e-9) return rs6hPi(A);
+    if (s.op === "×" && Math.abs(A - 3.14) < 1e-9) return rs6hPi(B);
+    if (s.op === "＋" || s.op === "－") {
+      let d = Math.max(rs6hDec(A), rs6hDec(B));
+      return d ? `直式要對齊小數點：${rs6hPad(A, d)}${s.op}${rs6hPad(B, d)}，從最右邊一位開始${s.op === "＋" ? "加" : "減"}＝□` : `${head}＝□`;
+    }
+    if (s.op === "÷") {
+      if (Number.isInteger(A) && Number.isInteger(B) && A % B === 0) return `${head}：想想 ${RS6H_N(B)}×□＝${RS6H_N(A)}`;
+      return `${head}：用直式除法，商的小數點要和 ${RS6H_N(A)} 的小數點對齊＝□`;
+    }
+    if (s.op === "×" && A <= 10 && B <= 10) return `${head}＝□`;
+    if (s.op === "×" && Number.isInteger(A) && Number.isInteger(B) && B >= 10 && B % 10 === 0) return `${head}：先算 ${RS6H_N(A)}×${RS6H_N(B / 10)}＝${RS6H_N((A * B) / 10)}，再補一個 0＝□`;
+    if (s.op === "×" && Number.isInteger(A) && Number.isInteger(B) && A >= 10 && A % 10 === 0) return `${head}：先算 ${RS6H_N(A / 10)}×${RS6H_N(B)}＝${RS6H_N((A * B) / 10)}，再補一個 0＝□`;
+    if (s.op === "×" && !Number.isInteger(A) && Number.isInteger(B)) return `${head}：先不管小數點，算完再點回 ${rs6hDec(A)} 位小數＝□`;
+    return `${head}＝□`;
+  }
+  // 由「說明」裡找出算式（在「＝答案」前面的那一串）
+  function rs6hExpr(ex, ans) {
+    let A = RS6H_N(ans),
+      i = ex.indexOf("＝" + A);
+    while (i >= 0) {
+      let after = ex.charAt(i + 1 + A.length);
+      if (!/[\d.]/.test(after)) break;
+      i = ex.indexOf("＝" + A, i + 1);
+    }
+    if (i < 0) return null;
+    let left = ex.slice(0, i),
+      segs = left.split("＝"),
+      cands = [];
+    // 每一段只留下最後的純算式部分
+    for (let sg of segs) {
+      let m = sg.match(/((?:\[f:\d+\/\d+\]|\d+(?:\.\d+)?)(?:[×÷＋－](?:\[f:\d+\/\d+\]|\d+(?:\.\d+)?))+)\s*$/);
+      m && cands.push(m[1]);
+    }
+    let full = left.replace(/^.*[，：]/, "");
+    full = full.replace(/^[^\d\[]*?＝/, ""); // 「弧長＝20×…」→「20×…」
+    return cands.length ? { cands, full } : null;
+  }
+  function rs6hNumber(st, typeId, s) {
+    let old = st.hints || [],
+      ans = st.answer;
+    // 6-3「由圓周長找半徑」：要除以 3.14，另外寫
+    if (typeId === "S6" && /半徑是多少/.test(st.prompt) && s && s.C) {
+      let d = Math.round((s.C / 3.14) * 1e6) / 1e6;
+      return [old[0] || "圓周長＝直徑×3.14。", `直徑×3.14＝${RS6H_N(s.C)}，所以直徑＝${RS6H_N(s.C)}÷3.14；半徑＝直徑÷2。`, `看 ×3.14 小卡：3.14×${RS6H_N(d)}＝${RS6H_N(s.C)}，所以直徑是 ${RS6H_N(d)} 公尺，半徑是 ${RS6H_N(d)}÷2＝□`];
+    }
+    let E = rs6hExpr(st.explanation || "", ans);
+    if (E) {
+      for (let c of E.cands) {
+        let tok = rs6hTok(c);
+        if (!tok) continue;
+        let R = rs6hSteps(tok);
+        if (Math.abs(R.value - ans) > 1e-6 || !R.steps.length) continue;
+        let done = [...new Set(R.steps.slice(0, -1).map((x) => `${rs6hShow(x.a)}${x.op}${rs6hShow(x.b)}＝${RS6H_N(x.r.v)}`))],
+          last = rs6hLast(R.steps[R.steps.length - 1]),
+          l2 = (old[1] ? (/[。？！]$/.test(old[1]) ? old[1] : old[1] + "。") : "") + `算式：${E.full}。`;
+        return [old[0] || "先想這一步要找什麼。", l2, (done.length ? done.join("，") + "，" : "") + last];
+      }
+    }
+    // 找不到算式：把說明裡的答案換成 □
+    let ex = (st.explanation || "").split(RS6H_N(ans)).join("□");
+    return [old[0], old[1] || old[2], ex.includes("□") ? ex : old[2]];
+  }
+  function rs6hChoice(st) {
+    let old = st.hints || [],
+      bad = (st.choices || []).filter((c) => !c.correct && c.feedback).slice(0, 2);
+    if (bad.length < 2) return old;
+    let elim = `先刪掉兩個：「${bad[0].label}」（${bad[0].feedback.replace(/。$/, "")}）；「${bad[1].label}」（${bad[1].feedback.replace(/。$/, "")}）。`;
+    return [old[0], old[1], (old[2] ? (/[。？！]$/.test(old[2]) ? old[2] : old[2] + "。") : "") + elim];
+  }
+  // 圖形要亮哪裡
+  function rs6hHl(st, fig) {
+    let p = st.prompt || "";
+    if (/幾分之幾/.test(p)) return "frac";
+    if (!fig || fig.kind !== "sector") return /什麼形狀|哪些部分|哪兩部分|怎麼算/.test(p) ? "parts" : "num";
+    if (/周長|繩子|外圍/.test(p)) return "per";
+    if (/弧長|弧/.test(p)) return "arc";
+    if (/半徑是多少/.test(p)) return "radius";
+    if (/面積/.test(p)) return "area";
+    return "";
+  }
+  (function rs6hInstall() {
+    for (let T of Su6) {
+      let orig = T.build;
+      T.build = function (s) {
+        let q = orig.call(this, s);
+        try {
+          for (let st of q.steps) {
+            st.hints0 = st.hints; // 原本的提示（測試、對照用）
+            st.hints = st.kind === "number" ? rs6hNumber(st, T.id, s) : rs6hChoice(st);
+            st.hl = rs6hHl(st, q.figure);
+            st.card314 = st.kind === "number";
+          }
+        } catch (e) {
+          console.warn("提示改寫失敗", T.id, e);
+        }
+        return q;
+      };
+    }
+  })();
+  // ---------- ×3.14 小卡（不算提示次數，不寫紀錄） ----------
+  function rs6Card() {
+    let cells = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 100].map((n) => `<span><i>3.14×${n}</i><b>${RS6H_N(3.14 * n)}</b></span>`).join(""),
+      el = T("details", { class: "rs-card314", id: "rs-card314" }, T("summary", {}, "×3.14 小卡"), T("div", { html: `<div class="g">${cells}</div><p>乘以 20、300 這種數：先查 2、3，再補 0（小數點往右移）。</p>` }));
+    if (!document.getElementById("rs-card314-css")) {
+      let c = document.createElement("style");
+      c.id = "rs-card314-css";
+      c.textContent =
+        ".rs-card314{margin:8px 0;border:2px solid #d9c27a;border-radius:12px;background:#fffbea;padding:4px 12px}.rs-card314 summary{font-weight:700;cursor:pointer;min-height:40px;display:flex;align-items:center}.rs-card314 .g{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px 12px;margin:4px 0;font-variant-numeric:tabular-nums}.rs-card314 .g span{display:flex;justify-content:space-between;border-bottom:1px solid #eadfb8;padding:3px 2px;font-size:17px}.rs-card314 .g i{font-style:normal}.rs-card314 p{margin:6px 0;font-size:14px;color:#6b5b2a}" +
+        ".rs-figcap{text-align:center;font-size:15px;font-weight:700;color:#2f5d46;margin:2px 0 6px}";
+      document.head.append(c);
+    }
+    return el;
+  }
+  window.__rs6h = { tok: rs6hTok, steps: rs6hSteps, pi: rs6hPi, expr: rs6hExpr, number: rs6hNumber, choice: rs6hChoice }; // 測試用
   function rsNeedPassword() {
     return Ti().requirePassword === !0;
   }
@@ -8434,7 +8712,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
             },
             { passive: !1 },
           ),
-          document.addEventListener("gesturestart", (i) => i.preventDefault()));
+          document.addEventListener("gesturestart", (i) => (window.__rsZoomed && window.__rsZoomed()) || i.preventDefault()));
       }
       local(e) {
         let t = this.el.getBoundingClientRect();
@@ -39521,6 +39799,234 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
   }
   window.__fpHoop = rsFpHoopEnd; // 測試用
   window.__rsFp = { get: rsFpGet, save: rsFpSave, items: RS_FP_ITEMS, cats: RS_FP_CATS, stickers: RS_FP_STICKERS, spots: RS_FP_SPOTS, cos: rsFpCos, ab: rsFpAb, merge: rsFpMerge, raceAt: RS_FP_RACE_AT, trackPt: rsFpTrackPt, laneR: rsFpLaneR, start: rsFpStart, end: rsFpEnd, taskCoin: rsFpTaskCoin, on: rsFpOn, collect: rsFpCollect }; // 測試用
+  // v3.4.0：平板畫面放大後縮不回來
+  // 原因：連點兩下按鈕會讓 iPad 放大；而轉視角時擋掉了兩指縮放，學生就縮不回來。
+  // 做法：1. 全頁不接受「點兩下放大」；2. 畫面已經放大時，不擋兩指縮放；3. 放大停住超過 1 秒，自動縮回原本大小。
+  (function rsZoomFix() {
+    let meta = document.querySelector('meta[name="viewport"]'),
+      base = "width=device-width,initial-scale=1,viewport-fit=cover",
+      st = document.createElement("style");
+    st.id = "rs-zoomfix-css";
+    st.textContent = "html,body{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}";
+    document.head.append(st);
+    meta && meta.setAttribute("content", base + ",maximum-scale=1");
+    var zoomed = () => !!(window.visualViewport && visualViewport.scale > 1.02);
+    window.__rsZoomed = zoomed;
+    let timer = 0,
+      resets = 0;
+    function reset() {
+      if (!zoomed() || !meta) return;
+      resets++;
+      // iOS：把 viewport 重新設成「最大 1 倍」，畫面就會縮回
+      meta.setAttribute("content", base + ",initial-scale=1,maximum-scale=1,minimum-scale=1");
+      setTimeout(() => meta.setAttribute("content", base + ",maximum-scale=1"), 400);
+      window.scrollTo(0, 0);
+    }
+    window.visualViewport &&
+      visualViewport.addEventListener("resize", () => {
+        clearTimeout(timer);
+        zoomed() && (timer = setTimeout(reset, 1000));
+      });
+    window.__rsZoomFix = { reset, count: () => resets };
+  })();
+  // v3.4.0：答題畫面改成「子母畫面」
+  // 題目區佔滿整個畫面（有圖時分兩欄：左欄圖＋提示，右欄題目＋選項），操場場景縮成左下角的小視窗。
+  // 小視窗：按住「移動」把手可拖到任何位置（記在這台平板）；點「看大一點」放大到全畫面、「收起」變成「看場景」小按鈕；打開第 3 層提示時自動收起，換下一步再出來。
+  // 「再看一次」「音效」「回首頁」搬到題目區上方那一排。
+  var RS_PIP = { state: "normal", auto: false, qid: null, pos: null };
+  function rsPipCss() {
+    if (document.getElementById("rs-pip-css")) return;
+    let st = document.createElement("style");
+    st.id = "rs-pip-css";
+    st.textContent = [
+      // 版面：題目區佔滿
+      "#app.mode-answer:not(.rs-pip-off){grid-template-columns:minmax(0,1fr)!important;grid-template-rows:minmax(0,1fr)!important}",
+      "#app.mode-answer:not(.rs-pip-off) #panel{grid-area:1/1!important;border:0}",
+      // 上方工具列（再看一次、音效、回首頁）
+      "#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.hud{position:fixed;top:0;left:0;right:0;right:auto;height:auto;padding:calc(8px + env(safe-area-inset-top,0px)) 0 0 140px;box-sizing:border-box;background:none;z-index:7;gap:8px}","#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.hud>.spacer,#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.hud>span:empty{display:none}","#app.mode-answer:not(.rs-pip-off) .p-head{padding-left:330px;min-height:64px;box-sizing:border-box}","#app.mode-answer:not(.rs-pip-off) .p-head .prog .lab span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}",
+      "#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.replay{position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:12px;z-index:8}",
+      "#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.hud .iconbtn,#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.replay{box-shadow:none}",
+      // 小視窗
+      "#app.mode-answer:not(.rs-pip-off) #stage{position:fixed!important;left:16px;bottom:calc(96px + env(safe-area-inset-bottom,0px));width:240px;height:150px;z-index:5;border-radius:16px;overflow:hidden;border:3px solid #fff;box-shadow:0 6px 20px rgba(0,0,0,.35);background:#cfe3c4}",
+      "#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>*:not(.hud):not(.replay):not(.trays):not(.toast){display:none!important}",
+      // 組數控制（第五單元）搬到小視窗上方
+      "#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.trays{position:fixed;left:16px;right:auto;bottom:calc(258px + env(safe-area-inset-bottom,0px));max-width:min(520px,calc(100vw - 32px));z-index:6;border:2px solid var(--line,#ddd)}",
+      "#app.mode-answer:not(.rs-pip-off).rs-pip-min:not(.rs-pip-big) #overlay3d>.trays{bottom:calc(152px + env(safe-area-inset-bottom,0px))}",
+      "#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.toast{position:fixed;top:calc(76px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:9}",
+      // 小視窗上的按鈕
+      ".rs-pip-ctl{display:none}",
+      "#app.mode-answer:not(.rs-pip-off) .rs-pip-ctl{display:flex;position:absolute;right:6px;top:6px;gap:6px;z-index:4}",
+      ".rs-pip-ctl button{min-height:40px;padding:0 12px;border-radius:999px;border:2px solid #1f4d2e;background:rgba(255,255,255,.96);color:#1f4d2e;font:700 16px/1 'Noto Sans TC',sans-serif;cursor:pointer;touch-action:manipulation}",
+      ".rs-pip-ctl .rs-pip-show,.rs-pip-ctl .rs-pip-back{display:none}",
+      // 收起：只剩「看場景」
+      "#app.mode-answer:not(.rs-pip-off).rs-pip-min:not(.rs-pip-big) #stage{width:132px;height:52px;border-radius:999px;background:#fff}",
+      "#app.mode-answer:not(.rs-pip-off).rs-pip-min:not(.rs-pip-big) #stage>canvas{visibility:hidden}",
+      "#app.mode-answer:not(.rs-pip-off).rs-pip-min:not(.rs-pip-big) .rs-pip-ctl{inset:0;right:0;top:0}",
+      "#app.mode-answer:not(.rs-pip-off).rs-pip-min:not(.rs-pip-big) .rs-pip-ctl>button{display:none}",
+      "#app.mode-answer:not(.rs-pip-off).rs-pip-min:not(.rs-pip-big) .rs-pip-ctl>.rs-pip-show{display:block;flex:1;border:0;font-size:18px}",
+      // 放大：全畫面
+      "#app.mode-answer:not(.rs-pip-off).rs-pip-big #stage{left:0;top:0;right:0;bottom:0;width:auto;height:auto;border:0;border-radius:0;z-index:30}",
+      "#app.mode-answer:not(.rs-pip-off).rs-pip-big .rs-pip-ctl{top:auto;right:auto;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px))}",
+      "#app.mode-answer:not(.rs-pip-off).rs-pip-big .rs-pip-ctl>button{display:none}",
+      "#app.mode-answer:not(.rs-pip-off).rs-pip-big .rs-pip-ctl>.rs-pip-back{display:block;min-height:60px;padding:0 28px;font-size:22px;background:#2f6b2a;color:#fff;border-color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.3)}",
+      // 移動把手（v3.4.0：可自由拖動）
+      ".rs-pip-drag{display:none}",
+      "#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) .rs-pip-drag{display:flex;align-items:center;justify-content:center;gap:4px;position:absolute;left:6px;bottom:6px;z-index:4;min-width:44px;height:40px;padding:0 10px;border-radius:999px;border:2px solid #1f4d2e;background:rgba(255,255,255,.96);color:#1f4d2e;font:700 16px/1 'Noto Sans TC',sans-serif;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}",
+      "#app.rs-pip-dragging .rs-pip-drag{cursor:grabbing;background:#ffe9a8}",
+      "#app.rs-pip-dragging #stage{transition:none;box-shadow:0 10px 28px rgba(0,0,0,.45)}",
+      "#app.mode-answer:not(.rs-pip-off).rs-pip-moved:not(.rs-pip-big) #stage{left:var(--pip-x)!important;top:var(--pip-y)!important;bottom:auto!important;right:auto!important}",
+      // 收起時：把手在左、看場景在右
+      "#app.mode-answer:not(.rs-pip-off).rs-pip-min:not(.rs-pip-big) #stage{width:180px}",
+      "#app.mode-answer:not(.rs-pip-off).rs-pip-min:not(.rs-pip-big) .rs-pip-drag{left:4px;top:4px;bottom:4px;height:auto;min-width:40px;padding:0 8px;border:0;background:#eef5ea}",
+      "#app.mode-answer:not(.rs-pip-off).rs-pip-min:not(.rs-pip-big) .rs-pip-ctl{left:48px}",
+      // 題目區兩欄
+      "#app:not(.rs-pip-off) .p-body.rs-2col{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:18px;align-items:start}",
+      "#app:not(.rs-pip-off) .p-body.rs-2col>.rs-col{display:flex;flex-direction:column;gap:12px;min-width:0}","#app:not(.rs-pip-off) .p-body.rs-2col>.rs-col-r>*{align-self:stretch;margin-left:0;margin-right:0;max-width:none}",
+      "#app:not(.rs-pip-off) .p-body.rs-2col>.rs-col-l{padding-bottom:170px}", // 左欄底下留給小視窗
+      "#app.rs-pip-min .p-body.rs-2col>.rs-col-l{padding-bottom:70px}",
+      // 沒有圖：一欄，但不要拉太寬
+      "#app.mode-answer:not(.rs-pip-off) .p-body:not(.rs-2col){padding-left:max(16px,calc((100% - 860px)/2));padding-right:max(16px,calc((100% - 860px)/2));padding-bottom:180px}",
+      "@media (max-width:699px){#app:not(.rs-pip-off) .p-body.rs-2col{display:flex;flex-direction:column}#app:not(.rs-pip-off) .p-body.rs-2col>.rs-col-l,#app.rs-pip-min .p-body.rs-2col>.rs-col-l{padding-bottom:0}#app:not(.rs-pip-off) .p-body.rs-2col>.rs-col-r{padding-bottom:140px}#app.mode-answer:not(.rs-pip-off) #stage{width:168px;height:105px}#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.trays{bottom:calc(212px + env(safe-area-inset-bottom,0px))}#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.hud{padding-left:70px}#app.mode-answer:not(.rs-pip-off) .p-head{padding-left:200px}}",
+    ].join("");
+    document.head.append(st);
+  }
+  // 把題目區分成兩欄（有圖、份數圖或動手做工具時才分）
+  function rsPipCols(d) {
+    try {
+      let kids = [...d.children],
+        isL = (el) => el.matches(".rs-op, .parts, .rs-fig, .hints"),
+        vis = kids.some((el) => el.matches(".rs-op, .parts, .rs-fig"));
+      let app = document.getElementById("app");
+      if (!vis || (app && app.classList.contains("rs-pip-off"))) return d;
+      let L = T("div", { class: "rs-col rs-col-l" }),
+        R = T("div", { class: "rs-col rs-col-r" });
+      for (let el of kids) (isL(el) ? L : R).append(el);
+      d.classList.add("rs-2col");
+      d.append(L, R);
+    } catch (e) {}
+    return d;
+  }
+  // 把小視窗放到 (x, y)，不超出畫面
+  // keep=true：只是重新套用（換題目、轉方向），不改記住的位置
+  function rsPipMoveTo(x, y, keep) {
+    let app = document.getElementById("app"),
+      stage = document.getElementById("stage");
+    if (!app || !stage) return;
+    if (!app.classList.contains("mode-answer") || app.classList.contains("rs-pip-off") || app.classList.contains("rs-pip-big")) return;
+    let w = stage.offsetWidth || 240,
+      h = stage.offsetHeight || 150,
+      W = window.innerWidth,
+      H = window.innerHeight,
+      m = 8;
+    x = Math.max(m, Math.min(W - w - m, x));
+    y = Math.max(m, Math.min(H - h - m, y));
+    x = Math.round(x);
+    y = Math.round(y);
+    keep || (RS_PIP.pos = { x, y });
+    app.style.setProperty("--pip-x", x + "px");
+    app.style.setProperty("--pip-y", y + "px");
+    app.classList.add("rs-pip-moved");
+  }
+  function rsPipSet(s, auto) {
+    let app = document.getElementById("app");
+    if (!app) return;
+    RS_PIP.state = s;
+    RS_PIP.auto = !!auto;
+    app.classList.toggle("rs-pip-min", s === "min");
+    app.classList.toggle("rs-pip-big", s === "big");
+    let w = window.__pgm && window.__pgm.world;
+    requestAnimationFrame(() => (w && w.resize && w.resize(), RS_PIP.pos && rsPipMoveTo(RS_PIP.pos.x, RS_PIP.pos.y, true)));
+  }
+  function rsPipInit() {
+    let app = document.getElementById("app"),
+      stage = document.getElementById("stage"),
+      panel = document.getElementById("panel");
+    if (!app || !stage || !panel || document.getElementById("rs-pip-ctl")) return;
+    rsPipCss();
+    let stop = (ev) => ev.stopPropagation(),
+      B = (cls, id, txt, fn) => {
+        let b = T("button", { type: "button", class: cls, id }, txt);
+        b.addEventListener("pointerdown", stop);
+        b.addEventListener("click", (ev) => (ev.stopPropagation(), fn()));
+        return b;
+      },
+      ctl = T(
+        "div",
+        { class: "rs-pip-ctl", id: "rs-pip-ctl" },
+        B("rs-pip-big-btn", "pip-big", "⤢ 看大一點", () => rsPipSet("big")),
+        B("rs-pip-min-btn", "pip-min", "收起", () => rsPipSet("min")),
+        B("rs-pip-show", "pip-show", "看場景", () => rsPipSet("normal")),
+        B("rs-pip-back", "pip-back", "回到題目", () => rsPipSet(RS_PIP.prev === "min" ? "min" : "normal")),
+      );
+    stage.append(ctl);
+    // 移動把手：按住拖動小視窗到任何位置（放大時不能拖）
+    let grip = T("div", { class: "rs-pip-drag", id: "pip-drag", role: "button", "aria-label": "按住拖動小視窗" }, "✥ 移動"),
+      drag = null;
+    grip.addEventListener("pointerdown", (ev) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+      let r = stage.getBoundingClientRect();
+      drag = { id: ev.pointerId, dx: ev.clientX - r.left, dy: ev.clientY - r.top };
+      try { grip.setPointerCapture(ev.pointerId); } catch (e) {}
+      app.classList.add("rs-pip-dragging");
+    });
+    grip.addEventListener("pointermove", (ev) => {
+      if (!drag || ev.pointerId !== drag.id) return;
+      ev.stopPropagation();
+      ev.preventDefault();
+      rsPipMoveTo(ev.clientX - drag.dx, ev.clientY - drag.dy);
+    });
+    let end = (ev) => {
+      if (!drag) return;
+      ev && ev.stopPropagation();
+      drag = null;
+      app.classList.remove("rs-pip-dragging");
+      try { localStorage.setItem("rs-pip-pos", JSON.stringify(RS_PIP.pos)); } catch (e) {}
+    };
+    grip.addEventListener("pointerup", end);
+    grip.addEventListener("pointercancel", end);
+    grip.addEventListener("click", (ev) => ev.stopPropagation());
+    stage.append(grip);
+    try {
+      let sv = JSON.parse(localStorage.getItem("rs-pip-pos") || "null");
+      sv && typeof sv.x === "number" && typeof sv.y === "number" && (RS_PIP.pos = sv);
+    } catch (e) {}
+    
+    window.addEventListener("resize", () => RS_PIP.pos && rsPipMoveTo(RS_PIP.pos.x, RS_PIP.pos.y, true));
+    // 「再看一次」：放大來看，看完按「回到題目」
+    document.addEventListener(
+      "click",
+      (ev) => {
+        let t = ev.target && ev.target.closest && ev.target.closest("#btn-replay");
+        t && app.classList.contains("mode-answer") && ((RS_PIP.prev = RS_PIP.state), rsPipSet("big"));
+      },
+      true,
+    );
+    // 每次題目區重畫：換新題目回到小視窗；打開第 3 層提示自動收起；換下一步再出來
+    new MutationObserver(() => {
+      if (!app.classList.contains("mode-answer")) return;
+      let cur = window.__pgm && window.__pgm.session && window.__pgm.session.cur,
+        qid = cur ? cur.q : null,
+        n = panel.querySelectorAll(".hint").length;
+      if (qid !== RS_PIP.qid) {
+        RS_PIP.qid = qid;
+        RS_PIP.state !== "normal" && rsPipSet("normal");
+      }
+      if (n >= 3 && RS_PIP.state === "normal") rsPipSet("min", true);
+      else if (n < 3 && RS_PIP.auto && RS_PIP.state === "min") rsPipSet("normal");
+    }).observe(panel, { childList: true });
+    // 第五單元「增減組數」要在場景裡操作：這種題目維持原本左右並排（場景大）
+    let ov = document.getElementById("overlay3d"),
+      offChk = () => app.classList.toggle("rs-pip-off", !!(ov && ov.querySelector(".trays")));
+    ov && new MutationObserver(() => (offChk(), requestAnimationFrame(() => window.__pgm && window.__pgm.world && window.__pgm.world.resize()))).observe(ov, { childList: true });
+    // 離開答題畫面時恢復
+    new MutationObserver(() => {
+      !app.classList.contains("mode-answer") && RS_PIP.state !== "normal" && rsPipSet("normal");
+      app.classList.contains("mode-answer") && RS_PIP.pos && !app.classList.contains("rs-pip-dragging") && requestAnimationFrame(() => rsPipMoveTo(RS_PIP.pos.x, RS_PIP.pos.y, true));
+    }).observe(app, { attributes: true, attributeFilter: ["class"] });
+  }
+  document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", rsPipInit) : rsPipInit();
+  window.__rsPip = { set: rsPipSet, state: () => RS_PIP.state, auto: () => RS_PIP.auto, pos: () => RS_PIP.pos, moveTo: rsPipMoveTo };
   // ===== v0.8.5：人物配件（眼鏡、背包、玩偶、計算機、斜背水壺、助聽器、頸掛風扇、鉛筆） =====
   function avAccessories(s, n, r, m, A, R) {
     let has = (k) => (s.acc || []).includes(k),
