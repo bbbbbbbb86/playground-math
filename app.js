@@ -19,7 +19,7 @@
   var RS_MOVE = { walk: 5, run: 1.7, accel: 10, decel: 14, turn: 12, maxTurn: 14, dead: 0.12, minJoy: 0.35, stride: 1.3 };
   var ut = {
     name: "操場中的數學",
-    appVersion: "3.4.0",
+    appVersion: "3.5.0",
     teacherPassword: "8642",
     questionsPerSession: 9,
     questionsPerSessionOptions: [8, 9, 10],
@@ -727,8 +727,9 @@
         t.numColor && rsColorNums(d.querySelector("#q-context .qtext")),
         t.focus && t.focus.length && (rsMarkKeys(d.querySelector("#q-context .qtext"), t.focus), t.silent || d.querySelector("#q-context .qtext").append(T("span", { class: "rs-focus-note" }, "▲ 標出來的是這一步要注意的條件"))),
         i.op && d.append(i.op.el),
-        r.diagram && !(n.section && r.level === "basic" && r.typeId === "T9") && d.append(this.partsDiagram(r.diagram)),
-        r.figure && d.append(rsFigure(a && a.hl ? { ...r.figure, hl: a.hl } : r.figure)),
+        r.diagram && !(n.section && r.level === "basic" && r.typeId === "T9" && !(typeof RS_AL !== "undefined" && RS_AL.noOps)) && d.append(this.partsDiagram(r.diagram)),
+        !r.figure && typeof RS_AL !== "undefined" && RS_AL.noOps && (i.pic === void 0 && (i.pic = rsAlPic(r)), i.pic && d.append(i.pic)),
+        r.figure && d.append(rsFigure(a && a.hl ? { ...r.figure, hl: a.hl, reveal: (i.hints[i.step] || 0) >= 2 } : r.figure)),
         // v2.4.0：第六單元每題都說明圓周率用 3.14
         /^S\d/.test(r.typeId || "") && d.append(T("p", { class: "rs-pi" }, "圓周率用 3.14")),
         r.equation && d.append(this.equationBox(r.equation)),
@@ -888,7 +889,9 @@
                 T("button", { type: "button", class: "btn primary", id: "btn-submit", onclick: qt(() => this.submit()) }, "確認答案"),
               ));
       }
-      (this.root.append(h, rsPipCols(d), g),
+      // v3.5.0：新版面（30_answer_layout.js）
+      (this.root.append(...rsAlBuild(this, h, d, g)),
+        rsAlAfter(this.root),
         (d.scrollTop = l),
         t.feedback &&
           t.scrollFeedback &&
@@ -6046,7 +6049,8 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       basic = q.level === "basic",
       stage = basic ? rs1FadeState(sess.code, q.typeId).stage : 3;
     ((cur.rec.section = sess.section), (cur.rec.opStage = basic && RS1_OP[q.typeId] ? RS1_STAGES[stage] : "無"), (cur.rec.opType = (basic && stage < 3 && RS1_OP[q.typeId]) || "無"));
-    cur.op = rs1MakeOp(q, stage, () => {
+    // v3.5.0：老師決定拿掉所有動手做，改成只呈現圖示（RS_AL.noOps）
+    cur.op = typeof RS_AL !== "undefined" && RS_AL.noOps ? null : rs1MakeOp(q, stage, () => {
       let r = cur.rec;
       r && !r.opUsed && ((r.opUsed = !0), r.firstAnswer === null && (r.opBeforeFirst = !0), Pi(sess.attempt));
     });
@@ -6741,7 +6745,8 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       path(rsArcPath(cx, cy, R, a0, a0 + a), f.hl === "area" ? "#6fbf6a" : C.fill);
       // v3.4.0：跟著步驟標出要看的地方
       let P = (deg) => [cx + R * Math.cos((deg * Math.PI) / 180), cy - R * Math.sin((deg * Math.PI) / 180)];
-      if (f.hl === "frac") {
+      // v3.5.0：切成幾塊的虛線會直接透露答案，打開第 2 層提示才畫
+      if (f.hl === "frac" && f.reveal) {
         let g = (x, y) => (y ? g(y, x % y) : x),
           q = 360 / g(a, 360);
         if (q <= 12)
@@ -6761,10 +6766,20 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         out.push(`<line x1="${cx}" y1="${cy}" x2="${x0}" y2="${y0}" stroke="#c0392b" stroke-width="${f.hl === "arc" ? 3 : 6}" stroke-linecap="round"/>`);
         f.hl !== "arc" && out.push(`<line x1="${cx}" y1="${cy}" x2="${x1}" y2="${y1}" stroke="#c0392b" stroke-width="6" stroke-linecap="round"/>`);
       }
-      let mid = ((a0 + a / 2) * Math.PI) / 180;
-      txt(cx + 26 * Math.cos(mid), cy - 26 * Math.sin(mid), `${a}°`, { color: C.red });
+      // v3.5.0：角度的字離圓心遠一點，不要壓到兩條半徑（角度小時要更遠）
+      let mid = ((a0 + a / 2) * Math.PI) / 180,
+        lw = 9 * String(a).length + 8,
+        rl = Math.hypot(lw / 2, 9) + (f.hl === "radius" || f.hl === "per" ? 6 : 3),
+        dd = a >= 180 ? 26 : Math.min(R * 0.62, Math.max(26, rl / Math.sin(((a / 2) * Math.PI) / 180)));
+      txt(cx + dd * Math.cos(mid), cy - dd * Math.sin(mid), `${a}°`, { color: C.red });
       let ra = (a0 * Math.PI) / 180;
-      txt(cx + (R / 2) * Math.cos(ra) + (a > 180 ? -14 : 0), cy - (R / 2) * Math.sin(ra) + (a > 180 ? 0 : 14), `${f.r} ${u}`);
+      // 半徑的字：一般放在水平半徑下面；大於 180° 時半徑是直的，字放在線的左邊
+      // 第 2 層提示畫出切塊的虛線時，「幾分之幾」用不到半徑，字拿掉以免壓到虛線
+      f.hl === "frac" && f.reveal && a < 180
+        ? 0
+        : a > 180
+        ? txt(cx - 10, cy - (R / 2) * Math.sin(ra), `${f.r} ${u}`, { anchor: "end" })
+        : txt(cx + (R / 2) * Math.cos(ra), cy - (R / 2) * Math.sin(ra) + 14, `${f.r} ${u}`);
     } else if (f.kind === "corner") {
       let cx = 175,
         cy = 105,
@@ -6775,10 +6790,12 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       if (f.r2) {
         let r2 = 82 * (f.r2 / f.r);
         out.push(`<path d="${rsArcPath(cx + 70, cy, r2, 0, 90)}" fill="${C.fill2}" stroke="${C.line}" stroke-width="2.5"/>`);
-        txt(cx + 70 + r2 / 2, cy + 12, `${f.r2} ${u}`, { size: 13 });
+        // v3.5.0：小扇形的字放在它上方，不壓到弧線、不超出圖框
+        txt(cx + 74, cy - r2 - 11, `${f.r2} ${u}`, { size: 13, anchor: "start" });
       }
       out.push(`<circle cx="${cx}" cy="${cy}" r="5" fill="${C.red}"/>`);
-      txt(cx - R / 2, cy - 10, `${f.r} ${u}`);
+      // v3.5.0：半徑的字放在往右那條半徑的下面（原本在左邊會壓到弧線）
+      txt(cx + R / 2, cy + 16, `${f.r} ${u}`);
       txt(cx - 20, cy + 22, "270°", { color: C.red, size: 14 });
     } else if (f.kind === "stadium") {
       let n = f.n || 2,
@@ -6791,7 +6808,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       path(`M ${x0 + L} ${y0} A ${r} ${r} 0 0 1 ${x0 + L} ${y0 + h} Z`, C.fill2);
       n === 2 && path(`M ${x0} ${y0 + h} A ${r} ${r} 0 0 1 ${x0} ${y0} Z`, C.fill2);
       txt(x0 + L / 2, y0 + h + 18, `${f.L} ${u}`);
-      txt(x0 + L + r * 0.45, y0 + h / 2, `半徑 ${f.r}`, { size: 13 });
+      txt(x0 + L + r * 0.5, y0 + h / 2 + 14, `半徑 ${f.r}`, { size: 13 }); // v3.5.0：放在虛線下面，不壓線
       out.push(`<line x1="${x0 + L}" y1="${y0 + h / 2}" x2="${x0 + L + r}" y2="${y0 + h / 2}" stroke="${C.ink}" stroke-width="1.5" stroke-dasharray="4 3"/>`);
     } else if (f.kind === "sqq" || f.kind === "seg" || f.kind === "leaf") {
       let s = 160,
@@ -6806,7 +6823,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         path(rsArcPath(x0, y0 + s, s, 0, 90), C.fill2);
         out.push(`<path d="M ${x0} ${y0 + s} L ${x0 + s} ${y0 + s} L ${x0} ${y0} Z" fill="${C.fill}" stroke="${C.line}" stroke-width="2.5"/>`);
         txt(x0 + s / 2, y0 + s + 16, `${f.r} ${u}`);
-        txt(x0 - 22, y0 + s / 2, `${f.r} ${u}`, { size: 13 });
+        txt(x0 - 8, y0 + s / 2, `${f.r} ${u}`, { size: 13, anchor: "end" }); // v3.5.0：靠右對齊在線的左邊，不壓線
       } else {
         out.push(`<rect x="${x0}" y="${y0}" width="${s}" height="${s}" fill="#ffffff" stroke="${C.line}" stroke-width="2.5"/>`);
         out.push(
@@ -6820,6 +6837,8 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
   // v3.4.0：圖下面的一句話（跟著步驟）
   function rsFigCap(f) {
     let g = (x, y) => (y ? g(y, x % y) : x);
+    // v3.5.0：「幾分之幾」「由哪些部分組成」的說明句等於給答案，打開第 2 層提示（f.reveal）才出現
+    if ((f.hl === "frac" || f.hl === "parts") && !f.reveal) return "";
     if (f.kind === "sector") {
       let a = f.a,
         q = 360 / g(a, 360),
@@ -6925,6 +6944,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         ".rs-guest-tag{background:#fff1d6;color:#7a5200;border:1px solid #f0cf8a;border-radius:999px;padding:4px 10px;font-weight:700;font-size:14px;align-self:center;max-width:34vw;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media (max-width:959px){.rs-guest-tag{position:absolute;left:calc(12px + env(safe-area-inset-left,0px));top:calc(62px + env(safe-area-inset-top,0px));font-size:13px;padding:3px 8px;max-width:60vw}}"),
       document.head.append(st));
   }
+  window.__rsFig = { svg: rsFigSvg, cap: rsFigCap }; // 測試用（v3.5.0：檢查圖和字有沒有重疊）
   // ===================== v1.7.0：拖曳／點選放置、作答回饋、關鍵條件標示 =====================
   // ---------- 拖曳＋「點選物件，再點選目的地」 ----------
   // 放置區：class "rs-zone"；accept(zone) 回傳 true 或「不能放」的原因文字；drop(zone) 放下去
@@ -7020,9 +7040,11 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     return {
       init(s, q, m) {
         let N = 360 / s.a;
-        return { N, n: m === "full" ? 0 : m === "partial" ? 1 : N };
+        // v3.5.0：新版面把題目的扇形當成第 1 片，已經放在圓裡
+        return { N, n: m === "full" ? 0 : m === "partial" ? 1 : N, mode: m };
       },
       draw(b, st, s, q, act) {
+        if (typeof RS_AL !== "undefined" && RS_AL.on) return rsSectorOpBig(b, st, s, q, act);
         let say = T("p", { class: "rs-say" }),
           R = 70,
           cx = 80,
@@ -7059,6 +7081,46 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         b.append(say);
       },
     };
+  }
+  // v3.5.0：拼一圈直接在圖上做——題目的扇形（標著角度和半徑）是第 1 片，把同樣的扇形拖進圓裡，看幾片剛好一整圈
+  function rsSectorOpBig(b, st, s, q, act) {
+    st.n < 1 && (st.n = 1);
+    let C = RS_FIG_C,
+      u = (q.figure && q.figure.u) || "公尺",
+      R = 112,
+      cx = 130,
+      cy = 130,
+      out = [`<circle cx="${cx}" cy="${cy}" r="${R}" fill="#fff" stroke="#9aa38c" stroke-width="2" stroke-dasharray="6 5"/>`];
+    for (let i = 0; i < st.n; i++)
+      out.push(`<path d="${rsArcPath(cx, cy, R, i * s.a, (i + 1) * s.a)}" fill="${i === 0 ? C.fill : i % 2 ? "#c9e7bd" : "#b3dca3"}" stroke="${C.line}" stroke-width="2.5" stroke-linejoin="round"/>`);
+    // 下一片放這裡（完整操作才有）
+    st.mode === "full" && st.n < st.N && out.push(`<path d="${rsArcPath(cx, cy, R, st.n * s.a, (st.n + 1) * s.a)}" fill="#f3f8ef" stroke="#7d8a6e" stroke-width="1.5" stroke-dasharray="5 4"/>`);
+    let lab = (x, y, t, col, sz) => out.push(`<text x="${x}" y="${y}" font-size="${sz || 17}" font-weight="700" fill="${col || C.ink}" text-anchor="middle" dominant-baseline="middle" stroke="#fff" stroke-width="4" paint-order="stroke">${t}</text>`),
+      mid = ((s.a / 2) * Math.PI) / 180;
+    lab(cx + 34 * Math.cos(mid), cy - 34 * Math.sin(mid), `${s.a}°`, C.red);
+    lab(cx + R / 2, cy + 16, `${s.r} ${u}`);
+    let circle = rsZone(T("div", { class: "rs-circle rs-circle-big", "aria-label": `圓：已經放了 ${st.n} 片`, html: `<svg viewBox="0 0 260 260" width="260" height="260">${out.join("")}</svg>` })),
+      piece = rsTok("sector", "", "rs-piece"),
+      say = T("p", { class: "rs-say" });
+    piece.innerHTML = `<svg viewBox="0 0 80 80" width="72" height="72" aria-hidden="true"><path d="${rsArcPath(10, 70, 60, 0, s.a)}" fill="${C.fill}" stroke="${C.line}" stroke-width="2"/></svg><span>${s.a}°</span>`;
+    piece.setAttribute("aria-label", `圓心角 ${s.a}° 的扇形`);
+    rsDrag(piece, {
+      say,
+      hint: "把扇形拖到圓裡。",
+      pickMsg: "再點一下圓，把扇形放進去。",
+      accept: (z) => (z === circle ? (st.n < st.N ? !0 : "已經拼滿一整圈了。") : "要放到圓裡。"),
+      drop: () => act(() => st.n++),
+    });
+    b.append(
+      T(
+        "div",
+        { class: "rs-row rs-sec-row rs-sec-big" },
+        T("div", { class: "rs-src" }, piece, T("span", { class: "rs-cnt" }, "拖我"), T("div", { class: "rs-ctl" }, T("button", { type: "button", class: "btn quiet", onclick: () => st.n > 1 && act(() => st.n--) }, "拿掉一片"))),
+        circle,
+      ),
+    );
+    say.textContent = st.n >= st.N ? `${st.N} 片剛好拼成一整圈，所以 1 片是整個圓的 ${st.N} 分之 1。` : st.n > 1 ? `圓裡有 ${st.n} 片了。再放放看，幾片剛好拼成一整圈？` : "綠色這片就是題目的扇形。把同樣的扇形拖進圓裡（也可以先點扇形，再點圓），看幾片剛好拼成一整圈。";
+    b.append(say);
   }
   // 移動標記（7-1 基礎題）：把兩個人的標記拖到他們的距離或時間，比一比
   function rsNiceStep(vals) {
@@ -9829,7 +9891,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         let e = this.session.cur;
         (this.setMode("answer"),
           this.renderHud(),
-          e.q.scene && (e.q.scene.layout === "trays" || e.q.scene.layout === "rows") && this.renderTrays(e.q.scene, this.introApi),
+          e.q.scene && (e.q.scene.layout === "trays" || e.q.scene.layout === "rows") && !(typeof RS_AL !== "undefined" && RS_AL.noOps) && this.renderTrays(e.q.scene, this.introApi),
           this.overlay.append(
             T(
               "button",
@@ -39829,204 +39891,561 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       });
     window.__rsZoomFix = { reset, count: () => resets };
   })();
-  // v3.4.0：答題畫面改成「子母畫面」
-  // 題目區佔滿整個畫面（有圖時分兩欄：左欄圖＋提示，右欄題目＋選項），操場場景縮成左下角的小視窗。
-  // 小視窗：按住「移動」把手可拖到任何位置（記在這台平板）；點「看大一點」放大到全畫面、「收起」變成「看場景」小按鈕；打開第 3 層提示時自動收起，換下一步再出來。
-  // 「再看一次」「音效」「回首頁」搬到題目區上方那一排。
-  var RS_PIP = { state: "normal", auto: false, qid: null, pos: null };
-  function rsPipCss() {
-    if (document.getElementById("rs-pip-css")) return;
+  // ===================== v3.5.0：答題畫面改版（老師 11/24 提案） =====================
+  // 原則：不刪教學功能，只減少同時出現在畫面上的東西。
+  // - 頂部一列：單元名稱、任務進度、第幾步、查看場景；右邊是音效、全螢幕、回首頁（操場工具列搬上來）。
+  // - 題目敘述橫跨上方，數字加粗；旁邊「念題目」。
+  // - 左欄（約 45%）放「看的」：圖形、動手做、提示、學習工具、答錯的說明。
+  // - 右欄（約 55%）放「做的」：這一步的問題、念選項、選項（放得下就 2×2）或數字鍵盤。
+  // - 沒有圖、也還沒打開提示、工具或答錯說明時，只有一欄（置中）。
+  // - 底部一列：提示、學習工具、確認答案。
+  // - 3D 場景不常駐（藏在題目後面、暫停繪製）；按「查看場景」全畫面看，按「回到題目」回來。
+  //   例外：第五單元「增減組數」要在場景裡操作，左邊直接放 3D 場景。
+  // - 老師 11/24 決定：拿掉所有動手做（含 5-3 增減組數），只呈現圖示（rsAlPic）。圖示不能和文字重疊。
+  var RS_AL = { on: true, noOps: true, big: false, reading: null, readId: null, mode: "" }; // noOps：拿掉所有動手做，只呈現圖示（老師 11/24）
+  var RS_AL_EYE =
+    '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 19l6-8 4 5 3-4 5 7z"/><circle cx="17" cy="6" r="2"/></svg>';
+  function rsAlCss() {
+    if (document.getElementById("rs-al-css")) return;
+    let A = "#app.mode-answer.rs-al",
+      N = A + ":not(.rs-al-scene)";
     let st = document.createElement("style");
-    st.id = "rs-pip-css";
+    st.id = "rs-al-css";
     st.textContent = [
-      // 版面：題目區佔滿
-      "#app.mode-answer:not(.rs-pip-off){grid-template-columns:minmax(0,1fr)!important;grid-template-rows:minmax(0,1fr)!important}",
-      "#app.mode-answer:not(.rs-pip-off) #panel{grid-area:1/1!important;border:0}",
-      // 上方工具列（再看一次、音效、回首頁）
-      "#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.hud{position:fixed;top:0;left:0;right:0;right:auto;height:auto;padding:calc(8px + env(safe-area-inset-top,0px)) 0 0 140px;box-sizing:border-box;background:none;z-index:7;gap:8px}","#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.hud>.spacer,#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.hud>span:empty{display:none}","#app.mode-answer:not(.rs-pip-off) .p-head{padding-left:330px;min-height:64px;box-sizing:border-box}","#app.mode-answer:not(.rs-pip-off) .p-head .prog .lab span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}",
-      "#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.replay{position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:12px;z-index:8}",
-      "#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.hud .iconbtn,#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.replay{box-shadow:none}",
-      // 小視窗
-      "#app.mode-answer:not(.rs-pip-off) #stage{position:fixed!important;left:16px;bottom:calc(96px + env(safe-area-inset-bottom,0px));width:240px;height:150px;z-index:5;border-radius:16px;overflow:hidden;border:3px solid #fff;box-shadow:0 6px 20px rgba(0,0,0,.35);background:#cfe3c4}",
-      "#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>*:not(.hud):not(.replay):not(.trays):not(.toast){display:none!important}",
-      // 組數控制（第五單元）搬到小視窗上方
-      "#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.trays{position:fixed;left:16px;right:auto;bottom:calc(258px + env(safe-area-inset-bottom,0px));max-width:min(520px,calc(100vw - 32px));z-index:6;border:2px solid var(--line,#ddd)}",
-      "#app.mode-answer:not(.rs-pip-off).rs-pip-min:not(.rs-pip-big) #overlay3d>.trays{bottom:calc(152px + env(safe-area-inset-bottom,0px))}",
-      "#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.toast{position:fixed;top:calc(76px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:9}",
-      // 小視窗上的按鈕
-      ".rs-pip-ctl{display:none}",
-      "#app.mode-answer:not(.rs-pip-off) .rs-pip-ctl{display:flex;position:absolute;right:6px;top:6px;gap:6px;z-index:4}",
-      ".rs-pip-ctl button{min-height:40px;padding:0 12px;border-radius:999px;border:2px solid #1f4d2e;background:rgba(255,255,255,.96);color:#1f4d2e;font:700 16px/1 'Noto Sans TC',sans-serif;cursor:pointer;touch-action:manipulation}",
-      ".rs-pip-ctl .rs-pip-show,.rs-pip-ctl .rs-pip-back{display:none}",
-      // 收起：只剩「看場景」
-      "#app.mode-answer:not(.rs-pip-off).rs-pip-min:not(.rs-pip-big) #stage{width:132px;height:52px;border-radius:999px;background:#fff}",
-      "#app.mode-answer:not(.rs-pip-off).rs-pip-min:not(.rs-pip-big) #stage>canvas{visibility:hidden}",
-      "#app.mode-answer:not(.rs-pip-off).rs-pip-min:not(.rs-pip-big) .rs-pip-ctl{inset:0;right:0;top:0}",
-      "#app.mode-answer:not(.rs-pip-off).rs-pip-min:not(.rs-pip-big) .rs-pip-ctl>button{display:none}",
-      "#app.mode-answer:not(.rs-pip-off).rs-pip-min:not(.rs-pip-big) .rs-pip-ctl>.rs-pip-show{display:block;flex:1;border:0;font-size:18px}",
-      // 放大：全畫面
-      "#app.mode-answer:not(.rs-pip-off).rs-pip-big #stage{left:0;top:0;right:0;bottom:0;width:auto;height:auto;border:0;border-radius:0;z-index:30}",
-      "#app.mode-answer:not(.rs-pip-off).rs-pip-big .rs-pip-ctl{top:auto;right:auto;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px))}",
-      "#app.mode-answer:not(.rs-pip-off).rs-pip-big .rs-pip-ctl>button{display:none}",
-      "#app.mode-answer:not(.rs-pip-off).rs-pip-big .rs-pip-ctl>.rs-pip-back{display:block;min-height:60px;padding:0 28px;font-size:22px;background:#2f6b2a;color:#fff;border-color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.3)}",
-      // 移動把手（v3.4.0：可自由拖動）
-      ".rs-pip-drag{display:none}",
-      "#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) .rs-pip-drag{display:flex;align-items:center;justify-content:center;gap:4px;position:absolute;left:6px;bottom:6px;z-index:4;min-width:44px;height:40px;padding:0 10px;border-radius:999px;border:2px solid #1f4d2e;background:rgba(255,255,255,.96);color:#1f4d2e;font:700 16px/1 'Noto Sans TC',sans-serif;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}",
-      "#app.rs-pip-dragging .rs-pip-drag{cursor:grabbing;background:#ffe9a8}",
-      "#app.rs-pip-dragging #stage{transition:none;box-shadow:0 10px 28px rgba(0,0,0,.45)}",
-      "#app.mode-answer:not(.rs-pip-off).rs-pip-moved:not(.rs-pip-big) #stage{left:var(--pip-x)!important;top:var(--pip-y)!important;bottom:auto!important;right:auto!important}",
-      // 收起時：把手在左、看場景在右
-      "#app.mode-answer:not(.rs-pip-off).rs-pip-min:not(.rs-pip-big) #stage{width:180px}",
-      "#app.mode-answer:not(.rs-pip-off).rs-pip-min:not(.rs-pip-big) .rs-pip-drag{left:4px;top:4px;bottom:4px;height:auto;min-width:40px;padding:0 8px;border:0;background:#eef5ea}",
-      "#app.mode-answer:not(.rs-pip-off).rs-pip-min:not(.rs-pip-big) .rs-pip-ctl{left:48px}",
-      // 題目區兩欄
-      "#app:not(.rs-pip-off) .p-body.rs-2col{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:18px;align-items:start}",
-      "#app:not(.rs-pip-off) .p-body.rs-2col>.rs-col{display:flex;flex-direction:column;gap:12px;min-width:0}","#app:not(.rs-pip-off) .p-body.rs-2col>.rs-col-r>*{align-self:stretch;margin-left:0;margin-right:0;max-width:none}",
-      "#app:not(.rs-pip-off) .p-body.rs-2col>.rs-col-l{padding-bottom:170px}", // 左欄底下留給小視窗
-      "#app.rs-pip-min .p-body.rs-2col>.rs-col-l{padding-bottom:70px}",
-      // 沒有圖：一欄，但不要拉太寬
-      "#app.mode-answer:not(.rs-pip-off) .p-body:not(.rs-2col){padding-left:max(16px,calc((100% - 860px)/2));padding-right:max(16px,calc((100% - 860px)/2));padding-bottom:180px}",
-      "@media (max-width:699px){#app:not(.rs-pip-off) .p-body.rs-2col{display:flex;flex-direction:column}#app:not(.rs-pip-off) .p-body.rs-2col>.rs-col-l,#app.rs-pip-min .p-body.rs-2col>.rs-col-l{padding-bottom:0}#app:not(.rs-pip-off) .p-body.rs-2col>.rs-col-r{padding-bottom:140px}#app.mode-answer:not(.rs-pip-off) #stage{width:168px;height:105px}#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.trays{bottom:calc(212px + env(safe-area-inset-bottom,0px))}#app.mode-answer:not(.rs-pip-off):not(.rs-pip-big) #overlay3d>.hud{padding-left:70px}#app.mode-answer:not(.rs-pip-off) .p-head{padding-left:200px}}",
-    ].join("");
+      // ---- 3D 場景藏在題目後面 ----
+      `${N}{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:minmax(0,1fr)!important}`,
+      `${N} #stage{grid-area:1/1!important}`, // 不能用 position:fixed（會自成一層，工具列就被題目蓋住）
+      `${N} #panel{position:fixed;inset:0;z-index:3;border:0}`,
+      `${N}:not(.rs-al-big) #overlay3d>*:not(.hud):not(.toast){display:none!important}`,
+      `${A}.rs-al-big #panel{visibility:hidden}`,
+      `${A}.rs-al-big #overlay3d>*:not(.hud):not(.replay):not(.toast){display:none!important}`,
+      `${A}.rs-al-big #overlay3d>.replay{position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:calc(12px + env(safe-area-inset-left,0px));z-index:6}`,
+      // 操場工具列（音效、全螢幕、回首頁）放在頂部列右邊
+      `${N} #overlay3d>.hud{position:fixed;top:0;right:0;left:auto;width:auto;height:auto;padding:calc(8px + env(safe-area-inset-top,0px)) calc(14px + env(safe-area-inset-right,0px)) 0 0;gap:8px;z-index:5;background:none}`,
+      `${N} #overlay3d>.hud>.spacer,${N} #overlay3d>.hud>span:empty{display:none}`,
+      `${N} #overlay3d>.hud .iconbtn{box-shadow:none;min-height:48px}`,
+      `${A} #overlay3d>.toast{position:fixed;top:calc(78px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:9}`,
+      ".rs-flystar{z-index:20!important}",
+      // 查看場景時的「回到題目」
+      ".rs-al-back{display:none}",
+      `${A}.rs-al-big .rs-al-back{display:block;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(22px + env(safe-area-inset-bottom,0px));z-index:6;min-height:60px;padding:0 32px;border-radius:999px;border:3px solid #fff;background:#2f6b2a;color:#fff;font:700 22px/1 'Noto Sans TC',sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3);cursor:pointer;touch-action:manipulation}`,
+      // 第五單元增減組數：左邊 3D 場景（45%），右邊題目（55%）
+      `@media (orientation:landscape){${A}.rs-al-scene{grid-template-columns:minmax(0,45fr) minmax(0,55fr)!important;grid-template-rows:minmax(0,1fr)!important}}`,
+      `${A}.rs-al-scene .p-head.rs-al-top{padding-right:calc(16px + env(safe-area-inset-right,0px))}`,
+      `${A}.rs-al-scene #btn-scene{display:none}`,
+      // 動手做（拼一圈以外）在左欄放大一點
+      "@media (min-width:1000px) and (orientation:landscape){.rs-al .rs-alc-l .rs-op-body:not(:has(.rs-sec-big)){zoom:1.15}}",
+      // ---- 頂部列 ----
+      `${A} #panel{background:var(--panel)}`,
+      `#app .p-head.rs-al-top{display:flex;align-items:center;gap:16px;min-height:58px;box-sizing:border-box;padding:calc(4px + env(safe-area-inset-top,0px)) calc(var(--al-hud,250px) + 24px) 6px calc(18px + env(safe-area-inset-left,0px));background:var(--paper);border-bottom:1px solid var(--line)}`,
+      "#app .rs-al-top .prog{flex:1 1 auto;min-width:0}",
+      "#app .rs-al-top .prog .lab{display:flex;align-items:baseline;gap:14px;font-size:16px;color:var(--ink-2);min-width:0}",
+      ".rs-al-sec{font-size:19px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}",
+      ".rs-al-task{white-space:nowrap;flex:none}",
+      "#app .rs-al-top .bar{max-width:360px;height:7px;margin-top:6px}",
+      "#app .rs-al-top .stepper{flex:none;font-size:17px;gap:6px}",
+      "#app .rs-al-top .stepper i{width:30px;height:8px;border-radius:4px}",
+      "#app .rs-al-top #btn-scene{flex:none;min-height:48px;box-shadow:none;border:1px solid var(--line)}",
+      // ---- 題目敘述（橫跨上方）----
+      "#app.rs-al .p-body.rs-al-body{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:10px;padding:10px calc(22px + env(safe-area-inset-right,0px)) 6px calc(22px + env(safe-area-inset-left,0px));overflow:hidden;touch-action:pan-y}",
+      ".rs-al-stem{display:flex;gap:14px;align-items:flex-start;padding:0 0 8px;border-bottom:1px solid var(--line)}",
+      ".rs-al-stem>.q-line{flex:1;min-width:0}",
+      ".rs-al-stem .qtext{font-size:23px;line-height:1.55;font-weight:400}",
+      ".rs-al-stem .ctx-line{display:inline}",
+      ".rs-al-stem .rs-n{font-weight:800;color:#1d1c19}",
+      ".rs-al-pi{display:inline-block;margin-left:10px;font-size:16px;color:var(--ink-2);white-space:nowrap}",
+      ".rs-al-stem #btn-read{flex:none;min-height:48px;box-shadow:none;border:1px solid var(--line)}",
+      // ---- 兩欄 ----
+      ".rs-al-cols{display:grid;grid-template-columns:minmax(0,45fr) minmax(0,55fr);gap:26px;min-height:0}",
+      ".rs-al-cols.one{grid-template-columns:minmax(0,1fr);width:100%;max-width:980px;margin:0 auto}",
+      ".rs-al-cols>.rs-alc{min-height:0;min-width:0;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:2px 4px 14px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}",
+      ".rs-al-cols>.rs-alc>*{align-self:stretch;margin-left:0;margin-right:0;max-width:none}",
+      ".rs-al-cols>.rs-alc-l{border-right:1px solid var(--line);padding-right:22px}",
+      ".rs-al-cols.one>.rs-alc-l{display:none}",
+      // 左欄：圖、動手做、提示、工具
+      ".rs-al .rs-alc-l .rs-fig{border:0;background:none;box-shadow:none;padding:0}",
+      ".rs-al .rs-alc-l .rs-fig svg{max-width:360px!important;max-height:34vh}",
+      ".rs-al .rs-alc-l .rs-figcap{font-size:18px}",
+      ".rs-al .rs-alc-l .rs-op{border:0;background:none;padding:0;margin:0}",
+      ".rs-al .rs-alc-l .rs-op-head{font-size:17px}",
+      ".rs-al .rs-alc-l .rs-say{font-size:18px;line-height:1.5}",
+      ".rs-pic{display:flex;flex-direction:column;gap:12px;align-items:flex-start;padding:4px 0}",
+      ".rs-pic-svg{width:100%;max-width:420px}",
+      ".rs-pic .rs-tk{width:26px;height:26px;min-width:26px}",
+      ".rs-pic-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;width:100%}",
+      ".rs-pic-name{font-size:18px;white-space:nowrap}",
+      ".rs-pic-tks{display:flex;flex-wrap:wrap;gap:4px;min-width:0}",
+      ".rs-pic-n{font-size:18px;font-weight:700;white-space:nowrap}",
+      ".rs-pic-grp{display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:2px dashed #b9cfa6;border-radius:12px;padding:10px 12px}",
+      ".rs-pic-glab{font-weight:700;font-size:18px;margin-right:4px}",
+      ".rs-pic-sep{width:2px;align-self:stretch;background:#b9cfa6}",
+      ".rs-pic-note{margin:0;font-size:17px;color:var(--ink-2)}",
+      ".rs-pic-cup{display:flex;flex-direction:column-reverse;width:46px;border:2px solid #7d8a6e;border-top:0;border-radius:0 0 10px 10px;overflow:hidden;background:#fff}",
+      ".rs-pic-cup i{display:block;height:12px;border-top:1px solid #dfe5d6}",
+      ".rs-pic-cup i.on{border-top-color:rgba(255,255,255,.6)}",
+      ".rs-pic-tbl{display:flex;align-items:stretch;gap:10px}",
+      ".rs-pic-col{display:flex;flex-direction:column;gap:8px;align-items:stretch}",
+      ".rs-pic-names b{font-size:18px;min-height:44px;display:flex;align-items:center}",
+      ".rs-pic-head{font-size:15px;color:var(--ink-2);min-height:22px;text-align:center}",
+      ".rs-pic-cell{min-height:44px;min-width:96px;display:flex;align-items:center;justify-content:center;border-radius:10px;font-size:20px;font-weight:700;padding:0 10px}",
+      ".rs-pic-arrow{align-self:center;font-size:28px;color:#a9402e;font-weight:800;padding-top:22px}",
+      ".rs-sec-big{display:flex;align-items:center;justify-content:center;gap:18px;flex-wrap:nowrap}",
+      ".rs-sec-big .rs-src{display:flex;flex-direction:column;align-items:center;gap:6px;flex:none;width:116px}.rs-sec-big .rs-ctl .btn{padding:0 10px;font-size:16px}",
+      ".rs-sec-big .rs-piece{min-width:0;min-height:88px;padding:4px 8px}",
+      ".rs-circle-big{flex:none}.rs-circle-big svg{width:236px;height:236px;display:block}",
+      ".rs-sec-big .rs-ctl .btn{min-height:48px}",
+      ".rs-al .rs-alc-l .hints .hint{font-size:20px;line-height:1.55}",
+      ".rs-al .rs-alc-l .feedback,.rs-al .rs-alc-r .feedback{font-size:18px;line-height:1.55}",
+      ".rs-al .rs-alc-l .tools{display:flex;flex-wrap:wrap;gap:10px}",
+      ".rs-al .rs-alc-l .tools .linkbtn{min-height:48px;font-size:18px}",
+      // 右欄：問題、念選項、選項、數字鍵盤
+      ".rs-al .rs-alc-r .q-line .qtext.prompt{font-size:26px;line-height:1.45}",
+      ".rs-al-optbar{display:flex;justify-content:flex-end;margin:-4px 0 -2px}",
+      "#btn-read-opts{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--paper);color:var(--ink-2);font:600 17px/1 'Noto Sans TC',sans-serif;cursor:pointer}",
+      "#btn-read-opts svg{width:20px;height:20px}",
+      "#btn-read-opts.on{background:var(--grass-tint);color:var(--grass-deeper)}",
+      ".rs-al .choices{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}",
+      ".rs-al .choices.one{grid-template-columns:minmax(0,1fr)}",
+      ".rs-al .choice-row{display:flex;min-width:0}",
+      ".rs-al .choice{min-height:88px;font-size:28px;line-height:1.35;padding:10px 16px 10px 60px;border-radius:16px}",
+      ".rs-al .choices.one .choice{min-height:66px;font-size:26px}",
+      ".rs-al .choice .mark{width:30px;height:30px;margin-top:-15px;left:16px}",
+      ".rs-al .choice.rs-reading{outline:4px solid #f2c14e;outline-offset:2px;background:#fff8df}",
+      ".rs-al .rs-alc-r .numbox .val{font-size:34px;min-height:68px;min-width:170px}",
+      ".rs-al .rs-alc-r .numbox .unit{font-size:24px}",
+      ".rs-al .rs-alc-r .numpad{max-width:440px;gap:8px}",
+      ".rs-al .rs-alc-r .numpad button{min-height:54px;font-size:28px}",
+      ".rs-al .rs-alc-r .numpad button.fn{font-size:18px}",
+      ".rs-al .rs-alc-r .rs-card314{max-width:440px}",
+      ".rs-al .rs-alc-r>.rs-al-done{font-size:16px;line-height:1.3;color:var(--grass-deeper);display:flex;flex-wrap:wrap;gap:6px 14px}",
+      ".rs-al .rs-alc-r>.rs-al-done span{background:#eef5ea;border-radius:999px;padding:3px 12px}",
+      // ---- 底部列 ----
+      "#app.rs-al .p-foot{gap:12px;min-height:72px;box-sizing:border-box;padding:8px calc(22px + env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) calc(22px + env(safe-area-inset-left,0px))}",
+      "#app.rs-al .p-foot .btn{min-height:56px;font-size:20px}",
+      "#app.rs-al .p-foot #btn-tools{flex:0 0 auto;min-height:56px;padding:0 20px;border-radius:var(--radius-m,14px);border:1px solid var(--line);background:var(--paper);font-size:19px;font-weight:600;color:var(--ink);text-decoration:none;display:inline-flex;align-items:center;gap:6px;cursor:pointer}",
+      "#app.rs-al .p-foot #btn-tools[aria-expanded=true]{background:var(--grass-tint);border-color:var(--grass-deep)}",
+      // ---- 窄畫面（手機、直放）：由上往下排，整頁可以捲 ----
+      "@media (max-width:899px),(orientation:portrait){" +
+        "#app.rs-al .p-body.rs-al-body{display:flex;flex-direction:column;overflow:auto;padding:10px 12px}" +
+        ".rs-al-cols{display:flex!important;flex-direction:column}" +
+        ".rs-al-cols>.rs-alc{overflow:visible;padding:0}" +
+        ".rs-al-cols>.rs-alc>*{align-self:stretch;margin-left:0;margin-right:0;max-width:none}",
+      ".rs-al-cols>.rs-alc-l{border-right:0;padding-right:0}" +
+        "#app .p-head.rs-al-top{gap:10px;min-height:56px;padding-left:12px}" +
+        "#app .rs-al-top .stepper span{display:none}" +
+        "#app .rs-al-top #btn-scene .lbl{display:none}" +
+        ".rs-al-stem .qtext{font-size:19px}" +
+        ".rs-al .rs-alc-r .q-line .qtext.prompt{font-size:21px}" +
+        ".rs-al .choice{min-height:60px;font-size:21px}" +
+        ".rs-al .choices.one .choice{min-height:54px;font-size:20px}" +
+        "#app.rs-al .p-foot{min-height:64px;padding:6px 12px calc(6px + env(safe-area-inset-bottom,0px))}" +
+        "#app.rs-al .p-foot .btn,#app.rs-al .p-foot #btn-tools{min-height:48px;font-size:17px}" +
+        "}",
+      "@media (max-width:599px){.rs-al-top .rs-al-task{display:none}.rs-circle-big svg{width:210px;height:210px}}",
+    ].join("\n");
     document.head.append(st);
   }
-  // 把題目區分成兩欄（有圖、份數圖或動手做工具時才分）
-  function rsPipCols(d) {
+  // 題目敘述裡的數字（含後面的單位）加粗；已經標色、標記的地方不動
+  function rsAlBoldNums(root) {
+    if (!root) return;
+    let tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT),
+      list = [];
+    for (let n; (n = tw.nextNode()); ) {
+      let p = n.parentElement;
+      if (!p || p.closest("b,strong,mark,.frac,.ratio,.rs-n,.rs-key,.rs-focus-note,.rs-al-pi,.chip,[class*='chip-']")) continue;
+      /\d/.test(n.nodeValue) && list.push(n);
+    }
+    let re = /(\d+(?:\.\d+)?(?:\s?(?:平方公尺|平方公分|公尺|公分|公里|公升|毫升|公斤|分鐘|小時|秒|分|時|°|度|人|個|顆|片|元|瓶|箱|次|圈|倍|組|排|杯|張|條|隊|天|週|周))?)/g;
+    for (let n of list) {
+      let s = n.nodeValue;
+      if (!re.test(s)) continue;
+      re.lastIndex = 0;
+      let f = document.createDocumentFragment(),
+        last = 0;
+      s.replace(re, (m, g, i) => {
+        i > last && f.append(document.createTextNode(s.slice(last, i)));
+        f.append(T("b", { class: "rs-n" }, m));
+        last = i + m.length;
+        return m;
+      });
+      last < s.length && f.append(document.createTextNode(s.slice(last)));
+      n.parentNode.replaceChild(f, n);
+    }
+  }
+  // 把作答面板原本的頂部、內容、底部重新排成新版面（原本的按鈕、編號、處理函式都保留）
+  function rsAlBuild(P, h, d, g) {
+    if (!RS_AL.on) return [h, d, g];
+    rsAlCss();
+    let st = P.state,
+      cur = P.cur,
+      q = st.q,
+      step = q.steps[cur.step],
+      ses = P.session,
+      kids = [...d.children],
+      take = (sel) => kids.filter((el) => el.matches(sel)),
+      one = (sel) => take(sel)[0] || null,
+      key = (q.qid || q.short || "") + "|" + cur.step;
+    // 換題目或換步驟：停止念選項
+    RS_AL.key !== key && ((RS_AL.key = key), rsAlStopRead());
+    // ---- 頂部列 ----
+    h.classList.add("rs-al-top");
+    let lab = h.querySelector(".prog .lab");
+    if (lab) {
+      Xt(lab);
+      let sec = ses.section ? `${ses.section} ` : "";
+      lab.append(T("span", { class: "rs-al-sec" }, sec + (q.short || "")), T("span", { class: "rs-al-task" }, `任務 ${ses.index + 1}／${ses.total}`));
+    }
+    let oldRead = h.querySelector("#btn-read");
+    oldRead && oldRead.remove();
+    let stepper = one(".stepper");
+    stepper && (stepper.querySelector(".rs-fixlab") && stepper.querySelector(".rs-fixlab").remove(), h.append(stepper));
+    h.append(
+      T(
+        "button",
+        { type: "button", class: "iconbtn", id: "btn-scene", onclick: () => rsAlScene(!0) },
+        T("span", { html: RS_AL_EYE, style: { display: "inline-flex" } }),
+        T("span", { class: "lbl" }, "查看場景"),
+      ),
+    );
+    // ---- 題目敘述 ----
+    let ctx = one("#q-context"),
+      read = T(
+        "button",
+        { type: "button", class: "iconbtn", id: "btn-read" },
+        T("span", { html: et.speaker, style: { display: "inline-flex" } }),
+        T("span", { class: "lbl" }, "念題目"),
+      );
+    read.addEventListener("click", () => (rsAlStopRead(), P.on.speak(Gt(q.context) + "。" + Gt(step.prompt), read)));
+    if (ctx) {
+      let sb = ctx.querySelector(":scope > .say");
+      sb && sb.remove();
+      rsAlBoldNums(ctx.querySelector(".qtext"));
+      let pi = one(".rs-pi");
+      pi && (pi.remove(), ctx.querySelector(".qtext").append(T("span", { class: "rs-al-pi" }, "（圓周率用 3.14）")));
+    }
+    let stem = T("div", { class: "rs-al-stem" }, ctx || T("span"), read);
+    // ---- 左欄 ----
+    let L = T("div", { class: "rs-alc rs-alc-l" }),
+      R = T("div", { class: "rs-alc rs-alc-r" }),
+      op = one(".rs-op"),
+      fig = one(".rs-fig"),
+      hn = cur.hints[cur.step] || 0,
+      fracStep = step.hl === "frac",
+      hasFrac = q.steps.some((x) => x.hl === "frac"),
+      bigOp = op && cur.op && cur.op.type === "拼一圈" && cur.op.stage < 2;
+    if (bigOp && fracStep) {
+      // （noOps 關掉時才會用到）拼一圈直接在圖上做：題目的扇形就是第 1 片
+      let cap = fig && fig.querySelector(".rs-figcap");
+      fig && fig.remove();
+      L.append(op);
+      cap && L.append(cap);
+    } else {
+      fig && L.append(fig);
+      op && !(bigOp && hasFrac) && L.append(op);
+    }
+    for (let el of take(".rs-pic, .parts, .equation")) L.append(el);
+    let hints = one(".hints");
+    hints && L.append(hints);
+    // 學習工具：按鈕放到底部列，打開後的工具與表放左欄
+    let tools = one(".tools"),
+      toolBtn = tools && tools.querySelector("#btn-tools");
+    if (toolBtn) {
+      toolBtn.className = "rs-al-toolbtn";
+      toolBtn.textContent = st.toolsOpen ? "收起工具" : "學習工具";
+    }
+    if (tools && st.toolsOpen) L.append(tools);
+    let sheet = one(".sheet");
+    sheet && L.append(sheet);
+    let hasLook = !!L.children.length;
+    // ---- 右欄 ----
+    let done = take(".feedback.right").filter((el) => el.style.gridTemplateColumns);
+    if (done.length) {
+      let box = T("div", { class: "rs-al-done", "aria-label": "前面答對的步驟" });
+      done.forEach((el, k) => {
+        let x = q.steps[k];
+        box.append(T("span", {}, `✓ 第 ${k + 1} 步：${x ? rsPlain(String(x.answerText)) : ""}${x && x.unit ? " " + x.unit : ""}`));
+        el.remove();
+      });
+      R.append(box);
+    }
+    let prompt = kids.find((el) => el.matches(".q-line") && el.querySelector("#q-prompt"));
+    if (prompt) {
+      let sb = prompt.querySelector(":scope > .say");
+      sb && sb.remove();
+      R.append(prompt);
+    }
+    let think = one(".think"),
+      choices = one(".choices");
+    think && R.append(think);
+    if (choices) {
+      choices.querySelectorAll(".choice-row > .say").forEach((b) => b.remove());
+      let rb = T("button", { type: "button", id: "btn-read-opts", "aria-label": "依序念出每個選項" }, T("span", { html: et.speaker, style: { display: "inline-flex" } }), "念選項");
+      rb.addEventListener("click", () => rsAlReadOpts(P, rb));
+      RS_AL.reading && rb.classList.add("on");
+      R.append(T("div", { class: "rs-al-optbar" }, rb), choices);
+    }
+    // 數字鍵盤（numberInput 回傳的外框沒有 class）、×3.14 小卡
+    let num = kids.find((el) => el.querySelector && el.querySelector(":scope > .numbox"));
+    num && R.append(num);
+    // ×3.14 小卡是查表用的，放左欄
+    let card = one(".rs-card314");
+    card && (L.append(card), (hasLook = !0));
+    // 回饋：答錯的說明放左欄（打開左欄）；答對的說明有左欄就放左欄；「先選一個答案」這類提醒放右欄
+    let live = kids.find((el) => el.getAttribute && el.getAttribute("aria-live") === "polite" && !el.id);
+    let wrong = live && live.querySelector(".feedback.wrong"),
+      right = live && live.querySelector(".feedback.right");
+    if (live) (wrong || (right && hasLook) ? L : R).append(live);
+    // 其他沒分到的東西（保險）放右欄
+    for (let el of kids) el.parentNode === d && R.append(el);
+    let two = hasLook || !!wrong;
+    let cols = T("div", { class: "rs-al-cols" + (two ? "" : " one") }, L, R);
+    Xt(d);
+    d.classList.add("rs-al-body");
+    d.append(stem, cols);
+    // ---- 底部列 ----
+    let hb = g.querySelector("#btn-hint");
+    toolBtn && (hb ? hb.after(toolBtn) : g.prepend(toolBtn));
+    return [h, d, g];
+  }
+  // ---- 靜態圖示（取代原本的動手做）：只畫題目給的數量，不畫算出來的結果 ----
+  function rsAlPic(q) {
+    let s = q && q.raw,
+      t = q && q.typeId,
+      P = s && s.ctx && typeof rs3P !== "undefined" ? rs3P[s.ctx] : null,
+      tks = (k, n) => Array.from({ length: n }, () => rs1Tk(k, "on")),
+      row = (name, k, n, unit) => T("div", { class: "rs-pic-row" }, T("b", { class: "rs-pic-name" }, name), T("div", { class: "rs-pic-tks" }, ...tks(k, n)), T("span", { class: "rs-pic-n" }, `${n} ${unit}`)),
+      box = (label, ...kids) => T("div", { class: "rs-pic", role: "img", "aria-label": label }, ...kids),
+      esc = (x) => String(x).replace(/[<&>]/g, (c) => ({ "<": "&lt;", "&": "&amp;", ">": "&gt;" })[c]),
+      txt = (x, y, str, o = {}) => `<text x="${x}" y="${y}" font-size="${o.size || 16}" font-weight="${o.w || 700}" fill="${o.fill || "#2b2a26"}" text-anchor="${o.anchor || "start"}" dominant-baseline="middle">${esc(str)}</text>`;
+    if (!s || !t) return null;
     try {
-      let kids = [...d.children],
-        isL = (el) => el.matches(".rs-op, .parts, .rs-fig, .hints"),
-        vis = kids.some((el) => el.matches(".rs-op, .parts, .rs-fig"));
-      let app = document.getElementById("app");
-      if (!vis || (app && app.classList.contains("rs-pip-off"))) return d;
-      let L = T("div", { class: "rs-col rs-col-l" }),
-        R = T("div", { class: "rs-col rs-col-r" });
-      for (let el of kids) (isL(el) ? L : R).append(el);
-      d.classList.add("rs-2col");
-      d.append(L, R);
+      let sc = q.scene || {};
+      // 5-3 增加組數：只畫 1 組
+      if (t === "T4" && (sc.layout === "trays" || sc.layout === "rows") && s.A && s.B) {
+        let [ka, a] = s.A,
+          [kb, c] = s.B,
+          U = sc.unit || "組",
+          nm = (k) => (typeof ha !== "undefined" && ha[k] ? ha[k].name : "");
+        return box(
+          `1 ${U}的圖示`,
+          T("div", { class: "rs-pic-grp" }, T("span", { class: "rs-pic-glab" }, `1 ${U}`), T("div", { class: "rs-pic-tks" }, ...tks(ka, a)), T("i", { class: "rs-pic-sep" }), T("div", { class: "rs-pic-tks" }, ...tks(kb, c))),
+          T("p", { class: "rs-pic-note" }, `1 ${U}：${nm(ka)} ${a}、${nm(kb)} ${c}`),
+        );
+      }
+      // 5-4 整數比：兩種東西各有幾個
+      if (t === "T5" && P) return box(`${P.fs} ${s.a} ${P.fu}、${P.bs} ${s.b} ${P.bu}`, row(P.fs, P.fk, s.a, P.fu), row(P.bs, P.bk, s.b, P.bu));
+      // 5-4 小數比：量杯，一格 0.1
+      if (t === "T6" && P) {
+        let A = Math.round(s.a * 10),
+          B = Math.round(s.b * 10);
+        if (Math.abs(A - s.a * 10) > 1e-6 || Math.abs(B - s.b * 10) > 1e-6 || Math.max(A, B) > 20) return null;
+        let cells = Math.max(10, A, B),
+          cup = (k, n) => T("div", { class: "rs-pic-cup" }, ...Array.from({ length: cells }, (_, i) => T("i", { class: i < n ? `on chip-${k}` : "" })));
+        return box(
+          `${P.fs} ${s.a} ${P.fu}、${P.bs} ${s.b} ${P.bu}`,
+          T("div", { class: "rs-pic-row" }, T("b", { class: "rs-pic-name" }, P.fs), cup(P.fk, A), T("span", { class: "rs-pic-n" }, `${s.a} ${P.fu}`)),
+          T("div", { class: "rs-pic-row" }, T("b", { class: "rs-pic-name" }, P.bs), cup(P.bk, B), T("span", { class: "rs-pic-n" }, `${s.b} ${P.bu}`)),
+          T("p", { class: "rs-pic-note" }, `一格是 0.1 ${P.fu}`),
+        );
+      }
+      // 5-5 求另一個量：1 倍的數量，和要求的那一組（？）
+      if (t === "T7" && P && s.k) {
+        let front = s.known === "back" ? "？" : `${s.a * s.k} ${P.fu}`,
+          back = s.known === "back" ? `${s.b * s.k} ${P.bu}` : "？",
+          col = (head, f, b2) => T("div", { class: "rs-pic-col" }, T("span", { class: "rs-pic-head" }, head), T("span", { class: `rs-pic-cell chip-${P.fk}` }, f), T("span", { class: `rs-pic-cell chip-${P.bk}` }, b2));
+        return box(
+          "比的兩個量",
+          T(
+            "div",
+            { class: "rs-pic-tbl" },
+            T("div", { class: "rs-pic-col rs-pic-names" }, T("span", { class: "rs-pic-head" }, " "), T("b", {}, P.fs), T("b", {}, P.bs)),
+            col("原本的比", `${s.a} ${P.fu}`, `${s.b} ${P.bu}`),
+            T("span", { class: "rs-pic-arrow" }, "→"),
+            col("題目問的", front, back),
+          ),
+        );
+      }
+      // 7-1 比快慢：兩人的時間或距離畫在同一條數線上
+      if ((t === "V1" || t === "V2") && sc.groups && sc.groups.length >= 2) {
+        let time = t === "V1",
+          vals = time ? [s.t1, s.t2] : [s.d1, s.d2],
+          unit = time ? "秒" : "公尺",
+          who = (typeof rs7Who !== "undefined" && rs7Who[s.at]) || ["甲", "乙"];
+        if (!vals.every((v) => v > 0)) return null;
+        let mx = Math.max(...vals) * 1.4,
+          step = [1, 2, 5, 10, 20, 25, 50, 100, 200, 500].find((x) => mx / x <= 6) || 1000,
+          max = Math.ceil(mx / step) * step,
+          x0 = 74,
+          x1 = 384,
+          X = (v) => x0 + ((x1 - x0) * v) / max,
+          out = [],
+          cols = ["#c0392b", "#8e8d86"];
+        vals.forEach((v, k) => {
+          let y = 28 + k * 46;
+          out.push(txt(8, y, who[k]));
+          out.push(`<rect x="${x0}" y="${y - 10}" width="${X(v) - x0}" height="20" rx="4" fill="${k ? "#e7e6e1" : "#f8dcd6"}" stroke="${cols[k]}" stroke-width="2"/>`);
+          out.push(txt(X(v) + 8, y, `${v} ${unit}`));
+        });
+        let ya = 118;
+        out.push(`<line x1="${x0}" y1="${ya}" x2="${x1}" y2="${ya}" stroke="#7d8a6e" stroke-width="2"/>`);
+        for (let v = 0; v <= max; v += step) out.push(`<line x1="${X(v)}" y1="${ya - 5}" x2="${X(v)}" y2="${ya + 5}" stroke="#7d8a6e" stroke-width="2"/>`, txt(X(v), ya + 18, String(v), { size: 14, w: 500, anchor: "middle", fill: "#5b6b4c" }));
+        out.push(txt(8, ya + 18, unit, { size: 14, w: 500, fill: "#5b6b4c" }));
+        return box(`${who[0]} ${vals[0]} ${unit}、${who[1]} ${vals[1]} ${unit}`, T("div", { class: "rs-pic-svg", html: `<svg viewBox="0 0 400 150" width="100%" style="max-width:400px;display:block">${out.join("")}</svg>` }));
+      }
+      // 7-5 同向、反向：從同一個出發點，兩人往哪邊走、每秒（每分）走多少
+      if (t === "V10" && (s.mode === "same" || s.mode === "opp") && sc.groups && sc.groups.length >= 2) {
+        let same = s.mode === "same",
+          o = same ? 40 : 200,
+          L = same ? 300 : 150,
+          vm = Math.max(s.v1, s.v2),
+          out = [],
+          cols = ["#c0392b", "#6b6a63"],
+          ar = (y, len, dir, col) => {
+            let xe = o + dir * len;
+            out.push(`<line x1="${o}" y1="${y}" x2="${xe - dir * 10}" y2="${y}" stroke="${col}" stroke-width="5" stroke-linecap="round"/>`, `<path d="M ${xe} ${y} L ${xe - dir * 14} ${y - 8} L ${xe - dir * 14} ${y + 8} Z" fill="${col}"/>`);
+          };
+        [s.v1, s.v2].forEach((v, k) => {
+          let y = 44 + k * 52,
+            dir = same || k === 0 ? 1 : -1,
+            len = Math.max(70, (L * v) / vm);
+          ar(y, len, dir, cols[k]);
+          out.push(txt(o + (dir * len) / 2, y - 18, sc.groups[k].label, { anchor: "middle", fill: cols[k] }));
+        });
+        let yr = 136;
+        out.push(`<line x1="20" y1="${yr}" x2="380" y2="${yr}" stroke="#9aa38c" stroke-width="3"/>`, `<circle cx="${o}" cy="${yr}" r="6" fill="#2f5d46"/>`, txt(o, yr + 20, "出發點", { anchor: "middle", size: 14 }));
+        return box(same ? "兩人從同一點往同一個方向出發" : "兩人從同一點往相反方向出發", T("div", { class: "rs-pic-svg", html: `<svg viewBox="0 0 400 170" width="100%" style="max-width:400px;display:block">${out.join("")}</svg>` }));
+      }
+    } catch (e) {
+      console.warn("圖示", t, e);
+    }
+    return null;
+  }
+  // 畫好以後：選項太長就改一欄；量頂部列右邊要讓給工具列多少；念選項的標示
+  function rsAlAfter(root) {
+    if (!RS_AL.on) return;
+    try {
+      let ch = root.querySelector(".rs-al .choices, .choices");
+      if (ch && document.getElementById("app").classList.contains("rs-al")) {
+        let lines = 0;
+        ch.querySelectorAll(".choice > span:nth-child(2)").forEach((sp) => {
+          let lh = parseFloat(getComputedStyle(sp).lineHeight) || 36;
+          lines = Math.max(lines, sp.offsetHeight / lh);
+        });
+        lines > 2.3 && ch.classList.add("one");
+      }
+      rsAlHudW();
+      RS_AL.readId && rsAlMark(RS_AL.readId);
     } catch (e) {}
-    return d;
   }
-  // 把小視窗放到 (x, y)，不超出畫面
-  // keep=true：只是重新套用（換題目、轉方向），不改記住的位置
-  function rsPipMoveTo(x, y, keep) {
+  function rsAlHudW() {
     let app = document.getElementById("app"),
-      stage = document.getElementById("stage");
-    if (!app || !stage) return;
-    if (!app.classList.contains("mode-answer") || app.classList.contains("rs-pip-off") || app.classList.contains("rs-pip-big")) return;
-    let w = stage.offsetWidth || 240,
-      h = stage.offsetHeight || 150,
-      W = window.innerWidth,
-      H = window.innerHeight,
-      m = 8;
-    x = Math.max(m, Math.min(W - w - m, x));
-    y = Math.max(m, Math.min(H - h - m, y));
-    x = Math.round(x);
-    y = Math.round(y);
-    keep || (RS_PIP.pos = { x, y });
-    app.style.setProperty("--pip-x", x + "px");
-    app.style.setProperty("--pip-y", y + "px");
-    app.classList.add("rs-pip-moved");
+      hud = document.querySelector("#overlay3d > .hud");
+    if (!app || !hud || !app.classList.contains("mode-answer")) return;
+    let w = Math.ceil(hud.getBoundingClientRect().width);
+    w > 40 && w < 700 && app.style.setProperty("--al-hud", w + "px");
   }
-  function rsPipSet(s, auto) {
+  // 念選項：一個一個念，念到的那個選項亮起來；再按一次停止
+  function rsAlMark(id) {
+    document.querySelectorAll(".choice.rs-reading").forEach((el) => el.classList.remove("rs-reading"));
+    let el = id && document.querySelector(`.choice[data-choice="${id}"]`);
+    el && el.classList.add("rs-reading");
+  }
+  function rsAlStopRead(silent) {
+    let was = !!RS_AL.reading;
+    RS_AL.reading = null;
+    RS_AL.readId = null;
+    rsAlMark(null);
+    let b = document.getElementById("btn-read-opts");
+    b && b.classList.remove("on");
+    was && !silent && va();
+  }
+  function rsAlReadOpts(P, btn) {
+    if (RS_AL.reading) return rsAlStopRead();
+    let step = P.state && P.state.q.steps[P.cur.step];
+    if (!step || !step.choices) return;
+    document.querySelectorAll(".say.on").forEach((i) => i.classList.remove("on"));
+    let tok = {},
+      k = 0;
+    RS_AL.reading = tok;
+    btn.classList.add("on");
+    let next = () => {
+      if (RS_AL.reading !== tok) return;
+      if (k >= step.choices.length) return rsAlStopRead(!0);
+      let c = step.choices[k],
+        text = `選項${k + 1}，${Gt(String(c.label))}`;
+      RS_AL.readId = c.id;
+      rsAlMark(c.id);
+      let ok = pr(text, () => {
+        k++;
+        setTimeout(next, 250);
+      });
+      ok || (rsAlStopRead(!0), P.on.speak(text, null));
+    };
+    next();
+  }
+  // 查看場景（全畫面）／回到題目
+  function rsAlScene(show) {
     let app = document.getElementById("app");
     if (!app) return;
-    RS_PIP.state = s;
-    RS_PIP.auto = !!auto;
-    app.classList.toggle("rs-pip-min", s === "min");
-    app.classList.toggle("rs-pip-big", s === "big");
-    let w = window.__pgm && window.__pgm.world;
-    requestAnimationFrame(() => (w && w.resize && w.resize(), RS_PIP.pos && rsPipMoveTo(RS_PIP.pos.x, RS_PIP.pos.y, true)));
+    RS_AL.big = !!show && app.classList.contains("mode-answer");
+    app.classList.toggle("rs-al-big", RS_AL.big);
+    RS_AL.big && rsAlStopRead();
+    rsAlSync();
   }
-  function rsPipInit() {
+  // 依目前狀態決定 3D 要不要畫、要不要重算大小
+  function rsAlSync() {
+    let app = document.getElementById("app"),
+      w = window.__pgm && window.__pgm.world;
+    if (!app || !w) return;
+    let ans = app.classList.contains("mode-answer"),
+      scene = ans && app.classList.contains("rs-al-scene"),
+      hidden = ans && RS_AL.on && !scene && !app.classList.contains("rs-al-big"),
+      mode = scene ? "scene" : "full";
+    w.sceneHidden = hidden;
+    if (mode !== RS_AL.mode) {
+      RS_AL.mode = mode;
+      requestAnimationFrame(() => w.resize && w.resize());
+    }
+  }
+  function rsAlInit() {
     let app = document.getElementById("app"),
       stage = document.getElementById("stage"),
-      panel = document.getElementById("panel");
-    if (!app || !stage || !panel || document.getElementById("rs-pip-ctl")) return;
-    rsPipCss();
-    let stop = (ev) => ev.stopPropagation(),
-      B = (cls, id, txt, fn) => {
-        let b = T("button", { type: "button", class: cls, id }, txt);
-        b.addEventListener("pointerdown", stop);
-        b.addEventListener("click", (ev) => (ev.stopPropagation(), fn()));
-        return b;
-      },
-      ctl = T(
-        "div",
-        { class: "rs-pip-ctl", id: "rs-pip-ctl" },
-        B("rs-pip-big-btn", "pip-big", "⤢ 看大一點", () => rsPipSet("big")),
-        B("rs-pip-min-btn", "pip-min", "收起", () => rsPipSet("min")),
-        B("rs-pip-show", "pip-show", "看場景", () => rsPipSet("normal")),
-        B("rs-pip-back", "pip-back", "回到題目", () => rsPipSet(RS_PIP.prev === "min" ? "min" : "normal")),
-      );
-    stage.append(ctl);
-    // 移動把手：按住拖動小視窗到任何位置（放大時不能拖）
-    let grip = T("div", { class: "rs-pip-drag", id: "pip-drag", role: "button", "aria-label": "按住拖動小視窗" }, "✥ 移動"),
-      drag = null;
-    grip.addEventListener("pointerdown", (ev) => {
-      ev.stopPropagation();
-      ev.preventDefault();
-      let r = stage.getBoundingClientRect();
-      drag = { id: ev.pointerId, dx: ev.clientX - r.left, dy: ev.clientY - r.top };
-      try { grip.setPointerCapture(ev.pointerId); } catch (e) {}
-      app.classList.add("rs-pip-dragging");
-    });
-    grip.addEventListener("pointermove", (ev) => {
-      if (!drag || ev.pointerId !== drag.id) return;
-      ev.stopPropagation();
-      ev.preventDefault();
-      rsPipMoveTo(ev.clientX - drag.dx, ev.clientY - drag.dy);
-    });
-    let end = (ev) => {
-      if (!drag) return;
-      ev && ev.stopPropagation();
-      drag = null;
-      app.classList.remove("rs-pip-dragging");
-      try { localStorage.setItem("rs-pip-pos", JSON.stringify(RS_PIP.pos)); } catch (e) {}
+      ov = document.getElementById("overlay3d");
+    if (!app || !stage || document.getElementById("btn-scene-back")) return;
+    rsAlCss();
+    app.classList.add("rs-al");
+    let back = T("button", { type: "button", class: "rs-al-back", id: "btn-scene-back" }, "回到題目");
+    back.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+    back.addEventListener("click", (ev) => (ev.stopPropagation(), rsAlScene(!1)));
+    stage.append(back);
+    // 第五單元增減組數：場景放左邊
+    let chk = () => {
+      let t = !!(ov && ov.querySelector(":scope > .trays"));
+      app.classList.contains("rs-al-scene") !== t && app.classList.toggle("rs-al-scene", t);
+      rsAlSync();
+      requestAnimationFrame(rsAlHudW);
     };
-    grip.addEventListener("pointerup", end);
-    grip.addEventListener("pointercancel", end);
-    grip.addEventListener("click", (ev) => ev.stopPropagation());
-    stage.append(grip);
-    try {
-      let sv = JSON.parse(localStorage.getItem("rs-pip-pos") || "null");
-      sv && typeof sv.x === "number" && typeof sv.y === "number" && (RS_PIP.pos = sv);
-    } catch (e) {}
-    
-    window.addEventListener("resize", () => RS_PIP.pos && rsPipMoveTo(RS_PIP.pos.x, RS_PIP.pos.y, true));
-    // 「再看一次」：放大來看，看完按「回到題目」
+    ov && new MutationObserver(chk).observe(ov, { childList: !0 });
+    // 換模式（離開答題、重看情境動畫）：回到題目畫面的預設；決定 3D 要不要畫
+    new MutationObserver(() => {
+      app.classList.contains("mode-answer") || (RS_AL.big && ((RS_AL.big = !1), app.classList.remove("rs-al-big")), RS_AL.reading && rsAlStopRead());
+      rsAlSync();
+    }).observe(app, { attributes: !0, attributeFilter: ["class"] });
+    // 別的念讀按鈕一按，就停止念選項
     document.addEventListener(
       "click",
       (ev) => {
-        let t = ev.target && ev.target.closest && ev.target.closest("#btn-replay");
-        t && app.classList.contains("mode-answer") && ((RS_PIP.prev = RS_PIP.state), rsPipSet("big"));
+        let t = ev.target && ev.target.closest && ev.target.closest(".say, #btn-read");
+        t && RS_AL.reading && rsAlStopRead(!0);
       },
-      true,
+      !0,
     );
-    // 每次題目區重畫：換新題目回到小視窗；打開第 3 層提示自動收起；換下一步再出來
-    new MutationObserver(() => {
-      if (!app.classList.contains("mode-answer")) return;
-      let cur = window.__pgm && window.__pgm.session && window.__pgm.session.cur,
-        qid = cur ? cur.q : null,
-        n = panel.querySelectorAll(".hint").length;
-      if (qid !== RS_PIP.qid) {
-        RS_PIP.qid = qid;
-        RS_PIP.state !== "normal" && rsPipSet("normal");
-      }
-      if (n >= 3 && RS_PIP.state === "normal") rsPipSet("min", true);
-      else if (n < 3 && RS_PIP.auto && RS_PIP.state === "min") rsPipSet("normal");
-    }).observe(panel, { childList: true });
-    // 第五單元「增減組數」要在場景裡操作：這種題目維持原本左右並排（場景大）
-    let ov = document.getElementById("overlay3d"),
-      offChk = () => app.classList.toggle("rs-pip-off", !!(ov && ov.querySelector(".trays")));
-    ov && new MutationObserver(() => (offChk(), requestAnimationFrame(() => window.__pgm && window.__pgm.world && window.__pgm.world.resize()))).observe(ov, { childList: true });
-    // 離開答題畫面時恢復
-    new MutationObserver(() => {
-      !app.classList.contains("mode-answer") && RS_PIP.state !== "normal" && rsPipSet("normal");
-      app.classList.contains("mode-answer") && RS_PIP.pos && !app.classList.contains("rs-pip-dragging") && requestAnimationFrame(() => rsPipMoveTo(RS_PIP.pos.x, RS_PIP.pos.y, true));
-    }).observe(app, { attributes: true, attributeFilter: ["class"] });
+    document.addEventListener("keydown", (ev) => ev.key === "Escape" && RS_AL.big && (ev.preventDefault(), rsAlScene(!1)));
+    window.addEventListener("resize", () => requestAnimationFrame(rsAlHudW));
+    rsAlSync();
   }
-  document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", rsPipInit) : rsPipInit();
-  window.__rsPip = { set: rsPipSet, state: () => RS_PIP.state, auto: () => RS_PIP.auto, pos: () => RS_PIP.pos, moveTo: rsPipMoveTo };
+  document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", rsAlInit) : rsAlInit();
+  window.__rsAl = { pic: rsAlPic, scene: rsAlScene, state: () => ({ big: RS_AL.big, reading: !!RS_AL.reading, hidden: !!(window.__pgm && window.__pgm.world && window.__pgm.world.sceneHidden) }) };
   // ===== v0.8.5：人物配件（眼鏡、背包、玩偶、計算機、斜背水壺、助聽器、頸掛風扇、鉛筆） =====
   function avAccessories(s, n, r, m, A, R) {
     let has = (k) => (s.acc || []).includes(k),
@@ -41301,8 +41720,8 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
           (this.update(i, r),
             e && e(i, r),
             this.updateStyle(i, r),
-            this.draw(r),
-            this.checkFps(Math.min(0.5, n)));
+            // v3.5.0：答題時 3D 場景藏在題目後面，不用畫（平板比較不燙、省電）
+            this.sceneHidden || (this.draw(r), this.checkFps(Math.min(0.5, n))));
         };
         t();
       }
