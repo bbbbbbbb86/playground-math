@@ -19,7 +19,7 @@
   var RS_MOVE = { walk: 5, run: 1.7, accel: 10, decel: 14, turn: 12, maxTurn: 14, dead: 0.12, minJoy: 0.35, stride: 1.3 };
   var ut = {
     name: "操場中的數學",
-    appVersion: "3.5.0",
+    appVersion: "3.5.1",
     teacherPassword: "8642",
     questionsPerSession: 9,
     questionsPerSessionOptions: [8, 9, 10],
@@ -729,7 +729,8 @@
         i.op && d.append(i.op.el),
         r.diagram && !(n.section && r.level === "basic" && r.typeId === "T9" && !(typeof RS_AL !== "undefined" && RS_AL.noOps)) && d.append(this.partsDiagram(r.diagram)),
         !r.figure && typeof RS_AL !== "undefined" && RS_AL.noOps && (i.pic === void 0 && (i.pic = rsAlPic(r)), i.pic && d.append(i.pic)),
-        r.figure && d.append(rsFigure(a && a.hl ? { ...r.figure, hl: a.hl, reveal: (i.hints[i.step] || 0) >= 2 } : r.figure)),
+        // v3.5.1：選擇題問「周長怎麼算」時，標出弧＋兩條半徑就等於給答案，第 2 層提示才標
+        r.figure && d.append(rsFigure(a && a.hl && !(a.hl === "per" && a.kind === "choice" && (i.hints[i.step] || 0) < 2) ? { ...r.figure, hl: a.hl, reveal: (i.hints[i.step] || 0) >= 2 } : r.figure)),
         // v2.4.0：第六單元每題都說明圓周率用 3.14
         /^S\d/.test(r.typeId || "") && d.append(T("p", { class: "rs-pi" }, "圓周率用 3.14")),
         r.equation && d.append(this.equationBox(r.equation)),
@@ -1050,7 +1051,7 @@
           : (n.kind === "choice" && e.wrongChoices.add(e.selected),
             (e.bad = !0),
             (e.silent = !1),
-            (e.focus = e.q.typeId === "T1" ? [] : rsFocusKeys(e.q, n, r.feedback)),
+            (e.focus = e.q.typeId === "T1" || r.calc ? [] : rsFocusKeys(e.q, n, r.feedback)),
             (e.numColor = !0),
             // v2.3.0：答錯 → 說明錯在哪裡，這個任務失敗；要重新接一題類似題（第 3 次失敗才看完整解說）
             (e.feedback = {
@@ -5962,7 +5963,7 @@
         "div",
         { class: "rs-notice", role: "status", "aria-live": "polite" },
         T("span", { class: "rs-n-tag" }, `新任務 ${app.session.index + 1}／${app.session.total}`),
-        T("b", {}, q.short),
+        T("b", {}, typeof rsAlName === "function" ? rsAlName(q) : q.short), // v3.5.1：任務卡不寫解法
         T("span", { class: "rs-n-place" }, `地點：${place}`),
       );
     app.overlay.append(el);
@@ -6741,7 +6742,8 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         cx = whole ? 160 : a > 90 ? 160 : 70,
         cy = whole ? 108 : a > 90 ? 175 : 185,
         a0 = a > 180 ? 90 : 0;
-      (a > 180 || a <= 90 || f.hl === "frac") && path(rsArcPath(cx, cy, R, 0, 360), "none", { dash: !0, w: 1.5, stroke: "#9aa38c" });
+      // v3.5.1：整個圓放得進圖框時才畫虛線圓（放不進去會只剩一小段，像多畫的線）
+      (a > 180 || f.hl === "frac") && path(rsArcPath(cx, cy, R, 0, 360), "none", { dash: !0, w: 1.5, stroke: "#9aa38c" });
       path(rsArcPath(cx, cy, R, a0, a0 + a), f.hl === "area" ? "#6fbf6a" : C.fill);
       // v3.4.0：跟著步驟標出要看的地方
       let P = (deg) => [cx + R * Math.cos((deg * Math.PI) / 180), cy - R * Math.sin((deg * Math.PI) / 180)];
@@ -6844,7 +6846,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         q = 360 / g(a, 360),
         p = a / g(a, 360);
       if (f.hl === "frac") return q <= 12 ? `整個圓切成 ${q} 塊一樣大的，塗色的是 ${p} 塊` : `塗色的部分占整個圓的 ${a}°／360°`;
-      if (f.hl === "arc") return "藍色的彎線是弧；紅色是半徑，直徑＝半徑×2";
+      if (f.hl === "arc") return "藍色的彎線是弧；紅色的線是一條半徑，直徑＝半徑×2";
       if (f.hl === "per") return "沿著邊走一圈：藍色的弧＋兩條紅色的半徑";
       if (f.hl === "area") return "要算的是塗色的這一整塊（面積）";
       if (f.hl === "radius") return "紅色的線是半徑";
@@ -7791,6 +7793,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     fp && parts.push(fp);
     if (parts.length === 1) {
       let v = parts[0];
+      if (v === 1) return "1×3.14＝□（乘以 1，數字不變）"; // v3.5.1：不用拆
       if (v >= 1 && v <= 9) return `${v}×3.14：${v}×3＝${v * 3}，${v}×0.14＝${RS6H_N(v * 0.14)}，${v * 3}＋${RS6H_N(v * 0.14)}＝□`;
       if (v >= 10 && Number.isInteger(v)) {
         let k = String(v).length - 1,
@@ -7897,7 +7900,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
             st.hints0 = st.hints; // 原本的提示（測試、對照用）
             st.hints = st.kind === "number" ? rs6hNumber(st, T.id, s) : rs6hChoice(st);
             st.hl = rs6hHl(st, q.figure);
-            st.card314 = st.kind === "number";
+            st.card314 = st.kind === "number" && st.hints.some((h) => /×\s*3\.14|3\.14\s*×/.test(String(h))); // v3.5.1：只有要乘 3.14 的步驟才有小卡
           }
         } catch (e) {
           console.warn("提示改寫失敗", T.id, e);
@@ -8677,6 +8680,12 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       if (i.invalid) return { invalid: !0 };
       qu(this.attempt, t.rec, t.step, i.answerText, i.correct);
       let r = { correct: i.correct, feedback: i.feedback, stepIndex: t.step };
+      // v3.5.1：第六單元數字題答錯、又不是常見的錯誤算法 → 多半是計算錯，說明改成指出算式（原本會重講觀念）
+      if (!i.correct && i.isDefault && n.kind === "number" && /^S/.test(t.q.typeId || "")) {
+        let m = (n.hints || []).map((h) => /算式：([^。]+)/.exec(h)).find(Boolean),
+          dec = /\./.test(String(n.answer)) || (m && /\d\.\d/.test(m[1]));
+        ((r.feedback = m ? `可能是算錯了。這一步要算 ${m[1]}，再算一次${dec ? "（小數點要對齊）" : ""}。` : `可能是算錯了，再仔細算一次${dec ? "（小數點要對齊）" : ""}。`), (r.calc = !0));
+      }
       if (i.correct)
         ((r.stepDone = !0),
           t.step < t.q.steps.length - 1
@@ -9588,7 +9597,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         if (this.free) return void rsFpHud(this); // v3.2.0：自由活動有自己的工具列
         let t = this.mode === "answer" || this.mode === "intro",
           n = e.cur,
-          i = n ? n.q.short : "",
+          i = n ? (typeof rsAlName === "function" ? rsAlName(n.q) : n.q.short) : "", // v3.5.1：工具列不寫解法
           r = T("button", {
             type: "button",
             class: "iconbtn",
@@ -39903,6 +39912,19 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
   //   例外：第五單元「增減組數」要在場景裡操作，左邊直接放 3D 場景。
   // - 老師 11/24 決定：拿掉所有動手做（含 5-3 增減組數），只呈現圖示（rsAlPic）。圖示不能和文字重疊。
   var RS_AL = { on: true, noOps: true, big: false, reading: null, readId: null, mode: "" }; // noOps：拿掉所有動手做，只呈現圖示（老師 11/24）
+  // v3.5.1：畫面上的題型名稱（頂部列、任務卡、操場工具列）不寫解法或公式，以免直接給了某一步的答案
+  // （例如「周長＝弧長＋兩條半徑」就是「周長要怎麼算」那一步的答案）。紀錄用的是題型代號，不受影響。
+  var RS_AL_NAMES = {
+    T3: "寫出比值（兩種不同的量）", T4: "找相等的比", T5: "化成最簡單整數比", T6: "小數比、分數比化簡",
+    S2: "扇形的周長", S3: "扇形的面積", S4: "從圓面積求扇形面積", S5: "圓心角、弧長和面積的關係", S6: "由圓周長求扇形面積",
+    S7: "牆角的扇形", S8: "長方形和半圓", S9: "正方形和 1/4 圓", S10: "1/4 圓和三角形",
+    V1: "距離一樣，比快慢", V2: "時間一樣，比快慢", V3: "求速率", V4: "比較兩個速率", V5: "求距離", V6: "求時間",
+    V7: "速率的單位換算", V8: "不同單位比快慢", V9: "平均速率", V10: "同向、反向、相遇",
+  };
+  function rsAlName(q) {
+    return (q && RS_AL_NAMES[q.typeId]) || (q && q.short) || "";
+  }
+  var RS_AL_SEEN = new WeakSet(); // 已經畫過的回饋（打勾動畫只播一次）
   var RS_AL_EYE =
     '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 19l6-8 4 5 3-4 5 7z"/><circle cx="17" cy="6" r="2"/></svg>';
   function rsAlCss() {
@@ -39926,6 +39948,9 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       `${N} #overlay3d>.hud .iconbtn{box-shadow:none;min-height:48px}`,
       `${A} #overlay3d>.toast{position:fixed;top:calc(78px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:9}`,
       ".rs-flystar{z-index:20!important}",
+      ".rs-noanim .tick path{animation:none!important;stroke-dashoffset:0!important}",
+      // v3.5.1：電腦、投影等大螢幕：題目區跟著畫面放大（平板 1280×800 以下不變）
+      `${N} #panel,${N} #overlay3d>.hud{zoom:var(--al-z,1)}`,
       // 查看場景時的「回到題目」
       ".rs-al-back{display:none}",
       `${A}.rs-al-big .rs-al-back{display:block;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(22px + env(safe-area-inset-bottom,0px));z-index:6;min-height:60px;padding:0 32px;border-radius:999px;border:3px solid #fff;background:#2f6b2a;color:#fff;font:700 22px/1 'Noto Sans TC',sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3);cursor:pointer;touch-action:manipulation}`,
@@ -40093,7 +40118,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     if (lab) {
       Xt(lab);
       let sec = ses.section ? `${ses.section} ` : "";
-      lab.append(T("span", { class: "rs-al-sec" }, sec + (q.short || "")), T("span", { class: "rs-al-task" }, `任務 ${ses.index + 1}／${ses.total}`));
+      lab.append(T("span", { class: "rs-al-sec" }, sec + rsAlName(q)), T("span", { class: "rs-al-task" }, `任務 ${ses.index + 1}／${ses.total}`));
     }
     let oldRead = h.querySelector("#btn-read");
     oldRead && oldRead.remove();
@@ -40163,7 +40188,9 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       let box = T("div", { class: "rs-al-done", "aria-label": "前面答對的步驟" });
       done.forEach((el, k) => {
         let x = q.steps[k];
-        box.append(T("span", {}, `✓ 第 ${k + 1} 步：${x ? rsPlain(String(x.answerText)) : ""}${x && x.unit ? " " + x.unit : ""}`));
+        let at = x ? rsPlain(String(x.answerText)) : "",
+          un = x && x.unit && !at.trim().endsWith(x.unit) ? " " + x.unit : ""; // v3.5.1：答案已經帶單位就不再加
+        box.append(T("span", {}, `✓ 第 ${k + 1} 步：${at}${un}`));
         el.remove();
       });
       R.append(box);
@@ -40195,6 +40222,9 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     let wrong = live && live.querySelector(".feedback.wrong"),
       right = live && live.querySelector(".feedback.right");
     if (live) (wrong || (right && hasLook) ? L : R).append(live);
+    // v3.5.1：同一個「答對了」再畫一次（例如按提示）時，打勾動畫不重播
+    let fbo = st.feedback;
+    if (fbo && typeof fbo === "object") RS_AL_SEEN.has(fbo) ? live && live.classList.add("rs-noanim") : RS_AL_SEEN.add(fbo);
     // 其他沒分到的東西（保險）放右欄
     for (let el of kids) el.parentNode === d && R.append(el);
     let two = hasLook || !!wrong;
@@ -40341,7 +40371,8 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     let app = document.getElementById("app"),
       hud = document.querySelector("#overlay3d > .hud");
     if (!app || !hud || !app.classList.contains("mode-answer")) return;
-    let w = Math.ceil(hud.getBoundingClientRect().width);
+    let z = parseFloat(app.style.getPropertyValue("--al-z")) || 1,
+      w = Math.ceil(hud.getBoundingClientRect().width / z);
     w > 40 && w < 700 && app.style.setProperty("--al-hud", w + "px");
   }
   // 念選項：一個一個念，念到的那個選項亮起來；再按一次停止
@@ -40441,11 +40472,18 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       !0,
     );
     document.addEventListener("keydown", (ev) => ev.key === "Escape" && RS_AL.big && (ev.preventDefault(), rsAlScene(!1)));
-    window.addEventListener("resize", () => requestAnimationFrame(rsAlHudW));
+    let zoom = () => {
+      let z = Math.min(innerWidth / 1180, innerHeight / 820);
+      z = z < 1.06 ? 1 : Math.min(1.6, Math.round(z * 100) / 100);
+      app.style.setProperty("--al-z", String(z));
+      requestAnimationFrame(rsAlHudW);
+    };
+    zoom();
+    window.addEventListener("resize", zoom);
     rsAlSync();
   }
   document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", rsAlInit) : rsAlInit();
-  window.__rsAl = { pic: rsAlPic, scene: rsAlScene, state: () => ({ big: RS_AL.big, reading: !!RS_AL.reading, hidden: !!(window.__pgm && window.__pgm.world && window.__pgm.world.sceneHidden) }) };
+  window.__rsAl = { name: rsAlName, pic: rsAlPic, scene: rsAlScene, state: () => ({ big: RS_AL.big, reading: !!RS_AL.reading, hidden: !!(window.__pgm && window.__pgm.world && window.__pgm.world.sceneHidden) }) };
   // ===== v0.8.5：人物配件（眼鏡、背包、玩偶、計算機、斜背水壺、助聽器、頸掛風扇、鉛筆） =====
   function avAccessories(s, n, r, m, A, R) {
     let has = (k) => (s.acc || []).includes(k),
