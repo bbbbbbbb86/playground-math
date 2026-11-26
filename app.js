@@ -19,7 +19,7 @@
   var RS_MOVE = { walk: 5, run: 1.7, accel: 10, decel: 14, turn: 12, maxTurn: 14, dead: 0.12, minJoy: 0.35, stride: 1.3 };
   var ut = {
     name: "操場中的數學",
-    appVersion: "3.5.3",
+    appVersion: "3.5.4",
     teacherPassword: "8642",
     questionsPerSession: 9,
     questionsPerSessionOptions: [8, 9, 10],
@@ -848,18 +848,19 @@
           ),
         );
       } else {
-        let m = 3 - p;
+        let m = 3 - p,
+          wl = m ? rsHintLeft(i) : 0; // v3.5.4：提示要等一下才能按（教師設定可關）
         (g.append(
           T(
             "button",
             {
               type: "button",
-              class: "btn quiet hintbtn",
+              class: "btn quiet hintbtn" + (wl ? " rs-hint-wait" : ""),
               id: "btn-hint",
-              "aria-disabled": String(m === 0),
+              "aria-disabled": String(m === 0 || wl > 0),
               onclick: qt(() => {
-                if (m === 0) return;
-                (this.on.hint(), this.render());
+                if (m === 0 || rsHintLeft(i) > 0) return;
+                (this.on.hint(), rsHintStart(i, "gap"), this.render());
                 let A = this.root.querySelectorAll(".hint"),
                   y = A[A.length - 1];
                 y && y.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -869,7 +870,7 @@
               html: et.bulb,
               style: { width: "20px", height: "20px", display: "inline-flex", verticalAlign: "-4px", marginRight: "4px" },
             }),
-            m === 0 ? "提示都看了" : `提示（${p}/3）`,
+            T("span", { class: "rs-hint-lab" }, m === 0 ? "提示都看了" : wl ? `提示（還要 ${wl} 秒）` : `提示（${p}/3）`),
           ),
         ),
           t.thinking
@@ -6103,6 +6104,23 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         }),
       ),
     );
+    // v3.5.4：提示要等一下才能按
+    let hw = rsHintCfg(),
+      hwOn = T("input", { type: "checkbox", id: "hintwait-on", checked: hw.on }),
+      hwF = T("input", { type: "number", id: "hintwait-first", min: "0", max: "120", value: String(hw.first), style: { width: "70px" } }),
+      hwG = T("input", { type: "number", id: "hintwait-gap", min: "0", max: "120", value: String(hw.gap), style: { width: "70px" } }),
+      hwSave = () => ((e.hintWait = { on: hwOn.checked, first: Math.max(0, Math.min(120, +hwF.value || 0)), gap: Math.max(0, Math.min(120, +hwG.value || 0)) }), save(hwOn.checked ? `提示：題目出現 ${e.hintWait.first} 秒後才能按，每一層之間等 ${e.hintWait.gap} 秒。` : "提示：不用等，隨時可以按。"));
+    [hwOn, hwF, hwG].forEach((x) => x.addEventListener("change", hwSave));
+    box.append(
+      T(
+        "div",
+        { class: "rs-fbmode", id: "hintwait-box" },
+        T("h3", {}, "提示要等一下才能按"),
+        T("label", {}, hwOn, " 開啟（避免每題一出來就把提示按完）"),
+        T("label", {}, "題目出現後 ", hwF, " 秒才能按提示 1"),
+        T("label", {}, "每打開一層，下一層再等 ", hwG, " 秒"),
+      ),
+    );
     box.append(T("h3", {}, "Google 試算表"));
     let url = T("input", { type: "text", id: "sheet-url", value: e.sheetUrl || "", placeholder: "https://script.google.com/macros/s/……/exec", "aria-label": "試算表網址" }),
       key = T("input", { type: "text", id: "sheet-key", value: e.sheetKey || "", placeholder: "通關碼（和 Apps Script 的 KEY 一樣）", "aria-label": "通關碼" }),
@@ -8093,6 +8111,39 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     return el;
   }
   window.__rs6h = { tok: rs6hTok, steps: rs6hSteps, pi: rs6hPiLines, expr: rs6hExpr, number: rs6hNum2, choice: rs6hChoice2, col: rs6hCol }; // 測試用
+  // ===================== v3.5.4：提示要等一下才能按（老師 11/26：避免每題都把三層提示按完） =====================
+  // 題目（每一步）出現後 first 秒才能按提示 1；每打開一層，下一層再等 gap 秒。教師設定可關、可調秒數（存在這台平板）。
+  // 作答紀錄不變（一樣記用到第幾層提示）。
+  var RS_HINTW = { on: !0, first: 20, gap: 15 };
+  function rsHintCfg() {
+    let w = (Ti() || {}).hintWait || {};
+    // 自動測試的瀏覽器（navigator.webdriver）沒設定時不等，舊測試才不會卡住；iPad、一般瀏覽器預設要等
+    return { on: w.on !== void 0 ? w.on !== !1 : !navigator.webdriver, first: w.first >= 0 ? +w.first : RS_HINTW.first, gap: w.gap >= 0 ? +w.gap : RS_HINTW.gap };
+  }
+  function rsHintStart(cur, kind) {
+    if (!cur) return;
+    let c = rsHintCfg();
+    (cur.hintReady = cur.hintReady || {})[cur.step] = Date.now() + (kind === "gap" ? c.gap : c.first) * 1e3;
+  }
+  // 還要等幾秒（0＝可以按）
+  function rsHintLeft(cur) {
+    let c = rsHintCfg();
+    if (!cur || !c.on) return 0;
+    (cur.hintReady && cur.hintReady[cur.step] !== void 0) || rsHintStart(cur, "first");
+    return Math.max(0, Math.ceil((cur.hintReady[cur.step] - Date.now()) / 1e3));
+  }
+  // 每秒更新按鈕上的秒數（不重畫整個作答區）
+  setInterval(() => {
+    let b = document.getElementById("btn-hint"),
+      a = window.__pgm,
+      cur = a && a.session && a.session.cur;
+    if (!b || !cur || !cur.hints || !b.classList.contains("rs-hint-wait")) return;
+    let left = rsHintLeft(cur),
+      lab = b.querySelector(".rs-hint-lab");
+    if (left > 0) lab && (lab.textContent = `提示（還要 ${left} 秒）`);
+    else (b.classList.remove("rs-hint-wait"), b.setAttribute("aria-disabled", "false"), lab && (lab.textContent = `提示（${cur.hints[cur.step] || 0}/3）`));
+  }, 1e3);
+  window.__rsHintW = { cfg: rsHintCfg, left: rsHintLeft }; // 測試用
   function rsNeedPassword() {
     return Ti().requirePassword === !0;
   }
@@ -40215,6 +40266,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       ".choice.rs-elim>span:not(.rs-elim-x):not(.sr){text-decoration:line-through;text-decoration-thickness:2px}",
       ".choice .rs-elim-x{margin-left:auto;padding-left:10px;color:#a8322a;font-weight:700;font-size:1.1em}",
       ".hints .hint .tx{white-space:pre-line}",
+      ".hintbtn.rs-hint-wait{opacity:.6;cursor:not-allowed}",
       ".rs-al .rs-alc-r .numbox .val{font-size:34px;min-height:68px;min-width:170px}",
       ".rs-al .rs-alc-r .numbox .unit{font-size:24px}",
       ".rs-al .rs-alc-r .numpad{max-width:440px;gap:8px}",
