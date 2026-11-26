@@ -19,7 +19,7 @@
   var RS_MOVE = { walk: 5, run: 1.7, accel: 10, decel: 14, turn: 12, maxTurn: 14, dead: 0.12, minJoy: 0.35, stride: 1.3 };
   var ut = {
     name: "操場中的數學",
-    appVersion: "3.5.2",
+    appVersion: "3.5.3",
     teacherPassword: "8642",
     questionsPerSession: 9,
     questionsPerSessionOptions: [8, 9, 10],
@@ -2678,10 +2678,10 @@
       sets: {
         basic: [
           { ctx: "sprinkler", r: 10, a: 90 },
-          { ctx: "bend", r: 20, a: 180 },
+          { ctx: "bend", r: 20, a: 90 },
           { ctx: "swing", r: 3, a: 90 },
           { ctx: "spin", r: 4, a: 45 },
-          { ctx: "mat", r: 3, a: 180 },
+          { ctx: "mat", r: 3, a: 270 },
           { ctx: "vzone", r: 5, a: 90 },
         ],
         standard: [
@@ -2689,13 +2689,13 @@
           { ctx: "softball", r: 30, a: 120 },
           { ctx: "sprinkler", r: 10, a: 270 },
           { ctx: "spin", r: 4, a: 90 },
-          { ctx: "stone", r: 3, a: 180 },
+          { ctx: "stone", r: 3, a: 120 },
           { ctx: "sprinkler", r: 20, a: 45 },
         ],
         challenge: [
           { ctx: "softball", r: 30, a: 45 },
           { ctx: "sprinkler", r: 20, a: 270 },
-          { ctx: "spin", r: 5, a: 180 },
+          { ctx: "spin", r: 5, a: 72 },
           { ctx: "bed", r: 10, a: 72 },
           { ctx: "nopark", r: 10, a: 90 },
           { ctx: "vzone", r: 4, a: 270 },
@@ -2750,8 +2750,8 @@
       sets: {
         basic: [
           { ctx: "bed", r: 10, a: 90 },
-          { ctx: "mat", r: 2, a: 180 },
-          { ctx: "sprinkler", r: 10, a: 180 },
+          { ctx: "mat", r: 2, a: 90 },
+          { ctx: "sprinkler", r: 10, a: 270 },
           { ctx: "stone", r: 4, a: 90 },
           { ctx: "court", r: 4, a: 45 },
           { ctx: "vzone", r: 5, a: 90 },
@@ -2761,7 +2761,7 @@
           { ctx: "bed", r: 20, a: 45 },
           { ctx: "sprinkler", r: 10, a: 270 },
           { ctx: "stone", r: 5, a: 90 },
-          { ctx: "nopark", r: 5, a: 180 },
+          { ctx: "nopark", r: 5, a: 72 },
           { ctx: "spin", r: 2, a: 90 },
         ],
         challenge: [
@@ -2834,10 +2834,10 @@
         basic: [
           { ctx: "sprinkler", r: 10, a: 90 },
           { ctx: "bed", r: 4, a: 90 },
-          { ctx: "mat", r: 3, a: 180 },
+          { ctx: "mat", r: 3, a: 90 },
           { ctx: "court", r: 3, a: 90 },
           { ctx: "spin", r: 4, a: 45 },
-          { ctx: "vzone", r: 10, a: 180 },
+          { ctx: "vzone", r: 10, a: 270 },
         ],
         standard: [
           { ctx: "softball", r: 30, a: 60 },
@@ -2845,12 +2845,12 @@
           { ctx: "bed", r: 10, a: 270 },
           { ctx: "sprinkler", r: 20, a: 45 },
           { ctx: "nopark", r: 5, a: 72 },
-          { ctx: "swing", r: 3, a: 180 },
+          { ctx: "swing", r: 3, a: 120 },
         ],
         challenge: [
           { ctx: "softball", r: 30, a: 120 },
           { ctx: "sprinkler", r: 20, a: 270 },
-          { ctx: "bed", r: 5, a: 180 },
+          { ctx: "bed", r: 5, a: 72 },
           { ctx: "spin", r: 4, a: 270 },
           { ctx: "softball", r: 30, a: 45 },
           { ctx: "stone", r: 10, a: 72 },
@@ -2905,8 +2905,8 @@
       sets: {
         basic: [
           { ctx: "spin", r: 4, a: 90 },
-          { ctx: "sprinkler", r: 10, a: 180 },
-          { ctx: "court", r: 4, a: 180 },
+          { ctx: "sprinkler", r: 10, a: 270 },
+          { ctx: "court", r: 4, a: 45 },
           { ctx: "stone", r: 4, a: 90 },
           { ctx: "nopark", r: 5, a: 72 },
           { ctx: "bed", r: 10, a: 90 },
@@ -2916,7 +2916,7 @@
           { ctx: "softball", r: 30, a: 120 },
           { ctx: "bed", r: 10, a: 270 },
           { ctx: "spin", r: 4, a: 270 },
-          { ctx: "spin", r: 5, a: 180 },
+          { ctx: "spin", r: 5, a: 72 },
           { ctx: "sprinkler", r: 20, a: 45 },
         ],
         challenge: [
@@ -2979,11 +2979,11 @@
       sets: {
         basic: [
           { ctx: "sprinkler", a: 90, C: 62.8, ask: "len" },
-          { ctx: "spin", a: 180, O: 12.56, ask: "area" },
+          { ctx: "spin", a: 90, O: 12.56, ask: "area" },
           { ctx: "bed", a: 45, C: 25.12, ask: "len" },
-          { ctx: "stone", a: 180, O: 78.5, ask: "area" },
+          { ctx: "stone", a: 72, O: 78.5, ask: "area" },
           { ctx: "vzone", a: 90, C: 31.4, ask: "len" },
-          { ctx: "court", a: 180, C: 12.56, ask: "len" },
+          { ctx: "court", a: 90, C: 12.56, ask: "len" },
         ],
         standard: [
           { ctx: "softball", a: 120, C: 188.4, ask: "len" },
@@ -3078,17 +3078,17 @@
         basic: [
           { ctx: "sprinkler", C: 62.8, a: 90 },
           { ctx: "spin", C: 25.12, a: 90 },
-          { ctx: "court", C: 18.84, a: 180 },
+          { ctx: "court", C: 18.84, a: 120 },
           { ctx: "bed", C: 31.4, a: 72 },
           { ctx: "stone", C: 18.84, a: 90 },
-          { ctx: "vzone", C: 62.8, a: 180 },
+          { ctx: "vzone", C: 62.8, a: 270 },
         ],
         standard: [
           { ctx: "softball", C: 188.4, a: 60 },
           { ctx: "sprinkler", C: 125.6, a: 90 },
           { ctx: "bed", C: 62.8, a: 270 },
           { ctx: "spin", C: 25.12, a: 270 },
-          { ctx: "nopark", C: 31.4, a: 180 },
+          { ctx: "nopark", C: 31.4, a: 72 },
           { ctx: "spin", C: 25.12, a: 45 },
         ],
         challenge: [
@@ -3096,7 +3096,7 @@
           { ctx: "sprinkler", C: 125.6, a: 270 },
           { ctx: "sprinkler", C: 157, a: 72 },
           { ctx: "vzone", C: 62.8, a: 72 },
-          { ctx: "stone", C: 31.4, a: 180 },
+          { ctx: "stone", C: 31.4, a: 270 },
           { ctx: "softball", C: 188.4, a: 120 },
         ],
       },
@@ -4655,7 +4655,7 @@
     }),
     Su7 = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10],
     Su = [$f, em, tm, nm, im, sm, rm, am, om];    Su = [$f, em, tm, nm, im, sm, rm, am, om];
-  var wc = { ratio: { version: "ratio-v6", types: Su }, sector: { version: "sector-v5", types: Su6 }, speed: { version: "speed-v3", types: Su7 } };
+  var wc = { ratio: { version: "ratio-v6", types: Su }, sector: { version: "sector-v6", types: Su6 }, speed: { version: "speed-v3", types: Su7 } };
   window.__RSBANK = { wc, ua, cm, ha };
   function is(s) {
     return wc[s] || null;
