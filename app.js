@@ -19,7 +19,7 @@
   var RS_MOVE = { walk: 5, run: 1.7, accel: 10, decel: 14, turn: 12, maxTurn: 14, dead: 0.12, minJoy: 0.35, stride: 1.3 };
   var ut = {
     name: "操場中的數學",
-    appVersion: "3.5.1",
+    appVersion: "3.5.2",
     teacherPassword: "8642",
     questionsPerSession: 9,
     questionsPerSessionOptions: [8, 9, 10],
@@ -622,6 +622,7 @@
     return Sc(s)
       .map((e) => (e.t === "text" ? Xf(e.v) : e.t === "chip" ? e.v : e.t === "ratio" ? `${gu(e.a)}比${gu(e.b)}` : bc(e.w, e.n, e.d)))
       .join("")
+      .replace(/\n+/g, "，") // v3.5.2：提示分行時，念的時候停一下
       .replace(/\s+/g, " ")
       .trim();
   }
@@ -730,7 +731,7 @@
         r.diagram && !(n.section && r.level === "basic" && r.typeId === "T9" && !(typeof RS_AL !== "undefined" && RS_AL.noOps)) && d.append(this.partsDiagram(r.diagram)),
         !r.figure && typeof RS_AL !== "undefined" && RS_AL.noOps && (i.pic === void 0 && (i.pic = rsAlPic(r)), i.pic && d.append(i.pic)),
         // v3.5.1：選擇題問「周長怎麼算」時，標出弧＋兩條半徑就等於給答案，第 2 層提示才標
-        r.figure && d.append(rsFigure(a && a.hl && !(a.hl === "per" && a.kind === "choice" && (i.hints[i.step] || 0) < 2) ? { ...r.figure, hl: a.hl, reveal: (i.hints[i.step] || 0) >= 2 } : r.figure)),
+        r.figure && d.append(rsFigure(a && a.hl && !(a.hl === "per" && a.kind === "choice" && (i.hints[i.step] || 0) < 2) ? { ...r.figure, hl: a.hl, reveal: (i.hints[i.step] || 0) >= 2, h: i.hints[i.step] || 0, ch: a.kind === "choice" } : r.figure)),
         // v2.4.0：第六單元每題都說明圓周率用 3.14
         /^S\d/.test(r.typeId || "") && d.append(T("p", { class: "rs-pi" }, "圓周率用 3.14")),
         r.equation && d.append(this.equationBox(r.equation)),
@@ -919,19 +920,23 @@
     choices(e) {
       let t = this.state,
         n = this.cur,
-        i = T("div", { class: "choices", role: "radiogroup", "aria-labelledby": "q-prompt" });
+        i = T("div", { class: "choices", role: "radiogroup", "aria-labelledby": "q-prompt" }),
+        // v3.5.2：打開第 3 層提示後，畫面上把兩個錯的選項變灰、打叉（不能再選；作答紀錄不變）
+        elim = rsElimIds(e, n);
+      elim.has(t.selected) && (t.selected = null);
       return (
         e.choices.forEach((r, a) => {
           let o = n.solved && r.correct,
-            lock = n.solved || n.failed,
+            out = elim.has(r.id) && !n.solved && !n.failed,
+            lock = n.solved || n.failed || out,
             c = T("button", {
               type: "button",
-              class: "choice" + (t.wrongChoices.has(r.id) && !n.solved ? " wrong" : "") + (o ? " right" : "") + (n.failed ? " locked" : ""),
+              class: "choice" + (t.wrongChoices.has(r.id) && !n.solved ? " wrong" : "") + (o ? " right" : "") + (n.failed ? " locked" : "") + (out ? " rs-elim" : ""),
               role: "radio",
               "aria-checked": String(t.selected === r.id),
               "aria-disabled": String(lock),
               "data-choice": r.id,
-              html: `<span class="mark" aria-hidden="true"></span><span>${bt(String(r.label))}</span>${t.wrongChoices.has(r.id) && !n.solved ? (t.silent ? '<span class="rs-x" aria-label="不對">✗</span>' : '<span class="rs-x">✗ 不對</span>') : ""}<span class="sr">選項 ${a + 1}</span>`,
+              html: `<span class="mark" aria-hidden="true"></span><span>${bt(String(r.label))}</span>${t.wrongChoices.has(r.id) && !n.solved ? (t.silent ? '<span class="rs-x" aria-label="不對">✗</span>' : '<span class="rs-x">✗ 不對</span>') : ""}${out ? '<span class="rs-elim-x" aria-hidden="true">✗</span>' : ""}<span class="sr">選項 ${a + 1}${out ? "，已經劃掉" : ""}</span>`,
               onclick: () => {
                 lock || ((t.selected = r.id), (t.bad = !1), t.feedback && t.feedback.kind === "need" && (t.feedback = null), this.render());
               },
@@ -1010,6 +1015,7 @@
       }
       if (t.kind === "choice" && /^[1-4]$/.test(e.key) && !this.cur.failed) {
         let n = t.choices[Number(e.key) - 1];
+        if (n && rsElimIds(t, this.cur).has(n.id)) return !0; // v3.5.2：劃掉的選項不能用鍵盤選
         if (n) return ((this.state.selected = n.id), this.render(), !0);
       }
       return e.key === "Enter" && !(e.target && e.target.tagName === "BUTTON") ? (this.submit(), !0) : !1;
@@ -6727,7 +6733,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
   function rsFigSvg(f) {
     let W = 320,
       H = 220,
-      C = RS_FIG_C,
+      C = f.col ? { ...RS_FIG_C, ...f.col } : RS_FIG_C, // v3.5.2：顏色跟著題目（例如「漆成橘色的部分」）
       out = [],
       txt = (x, y, s, o = {}) =>
         out.push(
@@ -6744,7 +6750,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         a0 = a > 180 ? 90 : 0;
       // v3.5.1：整個圓放得進圖框時才畫虛線圓（放不進去會只剩一小段，像多畫的線）
       (a > 180 || f.hl === "frac") && path(rsArcPath(cx, cy, R, 0, 360), "none", { dash: !0, w: 1.5, stroke: "#9aa38c" });
-      path(rsArcPath(cx, cy, R, a0, a0 + a), f.hl === "area" ? "#6fbf6a" : C.fill);
+      path(rsArcPath(cx, cy, R, a0, a0 + a), f.hl === "area" ? C.fillHi || "#6fbf6a" : C.fill);
       // v3.4.0：跟著步驟標出要看的地方
       let P = (deg) => [cx + R * Math.cos((deg * Math.PI) / 180), cy - R * Math.sin((deg * Math.PI) / 180)];
       // v3.5.0：切成幾塊的虛線會直接透露答案，打開第 2 層提示才畫
@@ -6841,21 +6847,23 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     let g = (x, y) => (y ? g(y, x % y) : x);
     // v3.5.0：「幾分之幾」「由哪些部分組成」的說明句等於給答案，打開第 2 層提示（f.reveal）才出現
     if ((f.hl === "frac" || f.hl === "parts") && !f.reveal) return "";
+    // v3.5.2：選擇題的說明句（周長、由哪些部分組成）等於答案，第 3 層提示才出現
+    if (f.ch && (f.hl === "per" || f.hl === "parts") && (f.h || 0) < 3) return "";
     if (f.kind === "sector") {
       let a = f.a,
         q = 360 / g(a, 360),
         p = a / g(a, 360);
-      if (f.hl === "frac") return q <= 12 ? `整個圓切成 ${q} 塊一樣大的，塗色的是 ${p} 塊` : `塗色的部分占整個圓的 ${a}°／360°`;
+      if (f.hl === "frac") return ""; // v3.5.2：切成幾塊、塗了幾塊，寫在第 3 層提示裡
       if (f.hl === "arc") return "藍色的彎線是弧；紅色的線是一條半徑，直徑＝半徑×2";
       if (f.hl === "per") return "沿著邊走一圈：藍色的弧＋兩條紅色的半徑";
       if (f.hl === "area") return "要算的是塗色的這一整塊（面積）";
       if (f.hl === "radius") return "紅色的線是半徑";
       return "";
     }
-    if (f.kind === "corner") return f.hl === "frac" || f.hl === "parts" ? "牆（建物）擋住 1 塊 90°，澆得到的是另外 3 塊 90°" : "";
+    if (f.kind === "corner") return f.hl === "frac" || f.hl === "parts" ? "牆擋住 1 塊 90°，澆得到的是另外 3 塊 90°" : "";
     if (f.kind === "stadium") return f.hl === "parts" ? ((f.n || 2) === 2 ? "中間是長方形；兩邊的半圓合起來是一個整圓" : "左邊是長方形，右邊是半圓") : "";
     if (f.kind === "sqq") return f.hl === "parts" ? "橘色的部分＝整個正方形－綠色的 1/4 圓" : "";
-    if (f.kind === "seg") return f.hl === "parts" ? "橘色的弧形＝1/4 圓－綠色的三角形" : "";
+    if (f.kind === "seg") return f.hl === "parts" ? `${(f.col && f.col.segName) || "橘色"}的弧形＝1/4 圓－${(f.col && f.col.triName) || "綠色"}的三角形` : "";
     if (f.kind === "leaf") return f.hl === "parts" ? "葉子＝正方形－葉子外面的兩塊白色" : "";
     return "";
   }
@@ -6869,8 +6877,8 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
   function rsShapes(s, t, e) {
     let f = s.fig,
       G = new Re(),
-      fillA = Te(10473882),
-      fillB = Te(16172139),
+      fillA = Te(f.col && f.col.fill ? parseInt(f.col.fill.slice(1), 16) : 10473882), // v3.5.2：顏色跟著題目
+      fillB = Te(f.col && f.col.fill2 ? parseInt(f.col.fill2.slice(1), 16) : 16172139),
       wall = Te(14209732),
       flat = (geo, m, x, z, y = 0.02) => {
         let o = new ne(geo, m);
@@ -7692,7 +7700,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     document.head.append(st);
   })();
 
-  // ===================== v3.4.0：第六單元三層提示改寫、圖形跟著步驟、×3.14 小卡 =====================
+  // ===================== v3.4.0：第六單元三層提示改寫、圖形跟著步驟、×3.14 小卡（v3.5.2 提示重寫，見下面 rs6hNum2／rs6hChoice2） =====================
   // 老師 11/20 觀察：「三層提示不夠明確，點到最後一層仍然不懂怎麼算」。11/21 老師同意第 3 層算到「答案的前一步」。
   // 題目、答案、選項、步驟都不動（題庫檔 06 不改，版本號不變）；只在出題後換掉 hints、加上 hl（圖形要亮哪裡）。
   //   數字題：第 1 層＝原本第 1 層；第 2 層＝原本第 2 層＋完整算式；第 3 層＝一步一步算，只留最後一個 □
@@ -7747,11 +7755,11 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         if (op === "×" && n.f) {
           // 乘分數：先 ÷分母，再 ×分子
           let t1 = { v: cur.v / n.f[1] };
-          steps.push({ a: cur, op: "÷", b: { v: n.f[1] }, r: t1 });
+          steps.push({ a: cur, op: "÷", b: { v: n.f[1] }, r: t1, fr: n.f }); // v3.5.2：記下是「乘分數」拆出來的
           cur = t1;
           if (n.f[0] !== 1) {
             let t2 = { v: cur.v * n.f[0] };
-            steps.push({ a: cur, op: "×", b: { v: n.f[0] }, r: t2 });
+            steps.push({ a: cur, op: "×", b: { v: n.f[0] }, r: t2, frn: !0 });
             cur = t2;
           }
           continue;
@@ -7780,9 +7788,30 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     let [i, f = ""] = s.split(".");
     return i + "." + f.padEnd(d, "0");
   }
-  // x×3.14：照位值拆開
-  function rs6hPi(x) {
+  // ===== v3.5.2：提示重寫（老師 11/26：提示看不懂）=====
+  // 三層各做一件事：第 1 層看哪裡（要用的數）、第 2 層怎麼想（關係、算式）、第 3 層帶著做（一行一步，最後留 □）。
+  // 選擇題第 3 層：畫面上把兩個錯的選項變灰、打叉（st.elim），提示裡不寫理由。不用括號，不寫「圓心角/360」這種文字分數。
+  var rs6hF = (n, d) => `[f:${n}/${d}]`;
+  var rs6hTwo = (a, b) => (b ? `${a}\n${b}` : a);
+  function rs6hFrac(a) {
+    let g = (x, y) => (y ? g(y, x % y) : x),
+      k = g(a, 360);
+    return [a / k, 360 / k];
+  }
+  var rs6hFracTip = (n, d) => (n === 1 ? `乘以 ${rs6hF(1, d)}，就是除以 ${d}。` : `乘以 ${rs6hF(n, d)}，就是先除以 ${d}，再乘以 ${n}。`);
+  // x×3.14：1～10 直接查 ×3.14 小卡；整十整百查小卡再移小數點；其他照位值拆開
+  function rs6hPiLines(x) {
+    let N = RS6H_N;
     x = Math.round(x * 1e6) / 1e6;
+    if (x === 1) return ["乘以 1，數字不變：1×3.14＝□"];
+    if (Number.isInteger(x) && ((x >= 2 && x <= 10) || x === 100)) return [`查 ×3.14 小卡：${x}×3.14＝□`];
+    if (Number.isInteger(x) && x > 10) {
+      let v = x,
+        k = 0;
+      while (v % 10 === 0) ((v /= 10), k++);
+      if (k && v <= 10) return [`查 ×3.14 小卡：${v}×3.14＝${N(v * 3.14)}`, `${x} 是 ${v} 的 ${10 ** k} 倍，小數點往右移 ${k} 位：`, `${N(v * 3.14)}×${10 ** k}＝□`];
+    }
+    if (x > 0 && x < 1 && Math.abs(1 / x - Math.round(1 / x)) < 1e-6) return [`乘以 ${N(x)}，就是除以 ${Math.round(1 / x)}：`, `3.14÷${Math.round(1 / x)}＝□`];
     let ip = Math.floor(x + 1e-9),
       fp = Math.round((x - ip) * 1e6) / 1e6,
       parts = [];
@@ -7791,39 +7820,62 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       d && parts.push(d * p);
     }
     fp && parts.push(fp);
-    if (parts.length === 1) {
-      let v = parts[0];
-      if (v === 1) return "1×3.14＝□（乘以 1，數字不變）"; // v3.5.1：不用拆
-      if (v >= 1 && v <= 9) return `${v}×3.14：${v}×3＝${v * 3}，${v}×0.14＝${RS6H_N(v * 0.14)}，${v * 3}＋${RS6H_N(v * 0.14)}＝□`;
-      if (v >= 10 && Number.isInteger(v)) {
-        let k = String(v).length - 1,
-          d = v / 10 ** k;
-        return `${RS6H_N(v)}×3.14：先算 ${d}×3.14＝${RS6H_N(d * 3.14)}（看 ×3.14 小卡），再乘以 ${10 ** k}，小數點往右移 ${k} 位＝□`;
-      }
-      return `${RS6H_N(v)}×3.14：可以想成 3.14÷${RS6H_N(1 / v)}（看 ×3.14 小卡）＝□`;
-    }
-    let ps = parts.map((v) => `${RS6H_N(v)}×3.14＝${RS6H_N(v * 3.14)}`);
-    return `${RS6H_N(x)}×3.14：拆成 ${parts.map(RS6H_N).join("＋")}，${ps.join("、")}，再加起來：${parts.map((v) => RS6H_N(v * 3.14)).join("＋")}＝□`;
+    if (parts.length < 2) return [`${N(x)}×3.14＝□`];
+    return [`${N(x)} 拆成 ${parts.map(N).join("＋")}：`, ...parts.map((p) => `${N(p)}×3.14＝${N(p * 3.14)}`), `${parts.map((p) => N(p * 3.14)).join("＋")}＝□`];
   }
-  function rs6hLast(s) {
-    let A = s.a.v,
-      B = s.b.v,
-      head = `${rs6hShow(s.a)}${s.op}${rs6hShow(s.b)}`;
-    if (s.op === "×" && Math.abs(B - 3.14) < 1e-9) return rs6hPi(A);
-    if (s.op === "×" && Math.abs(A - 3.14) < 1e-9) return rs6hPi(B);
-    if (s.op === "＋" || s.op === "－") {
+  // 中間的步驟（已經算好）
+  function rs6hLine2(x) {
+    let A = rs6hShow(x.a),
+      r = RS6H_N(x.r.v);
+    if (x.fr) return x.fr[0] === 1 ? `${A}×${rs6hF(1, x.fr[1])}＝${A}÷${x.fr[1]}＝${r}` : `${A}×${rs6hF(x.fr[0], x.fr[1])}：先除以 ${x.fr[1]}，再乘以 ${x.fr[0]}\n${A}÷${x.fr[1]}＝${r}`;
+    return `${A}${x.op}${rs6hShow(x.b)}＝${r}`;
+  }
+  // 最後一步（留 □）
+  function rs6hLast2(x) {
+    let A = x.a.v,
+      B = x.b.v,
+      N = RS6H_N,
+      a = N(A),
+      b = N(B);
+    if (x.op === "×" && Math.abs(B - 3.14) < 1e-9) return rs6hPiLines(A);
+    if (x.op === "×" && Math.abs(A - 3.14) < 1e-9) return rs6hPiLines(B);
+    if (x.op === "＋" || x.op === "－") {
       let d = Math.max(rs6hDec(A), rs6hDec(B));
-      return d ? `直式要對齊小數點：${rs6hPad(A, d)}${s.op}${rs6hPad(B, d)}，從最右邊一位開始${s.op === "＋" ? "加" : "減"}＝□` : `${head}＝□`;
+      return d ? ["用直式算，小數點要對齊：", `${rs6hPad(A, d)}${x.op}${rs6hPad(B, d)}＝□`] : [`${a}${x.op}${b}＝□`];
     }
-    if (s.op === "÷") {
-      if (Number.isInteger(A) && Number.isInteger(B) && A % B === 0) return `${head}：想想 ${RS6H_N(B)}×□＝${RS6H_N(A)}`;
-      return `${head}：用直式除法，商的小數點要和 ${RS6H_N(A)} 的小數點對齊＝□`;
+    if (x.op === "÷") {
+      let pre = x.fr && x.fr[0] === 1 ? [`乘以 ${rs6hF(1, x.fr[1])}，就是除以 ${x.fr[1]}：`] : [];
+      if (Number.isInteger(A) && Number.isInteger(B) && A % B === 0) return [...pre, `${a}÷${b}＝□`, `想想 ${b}×□＝${a}`];
+      return [...pre, "用直式除法，商的小數點要對齊：", `${a}÷${b}＝□`];
     }
-    if (s.op === "×" && A <= 10 && B <= 10) return `${head}＝□`;
-    if (s.op === "×" && Number.isInteger(A) && Number.isInteger(B) && B >= 10 && B % 10 === 0) return `${head}：先算 ${RS6H_N(A)}×${RS6H_N(B / 10)}＝${RS6H_N((A * B) / 10)}，再補一個 0＝□`;
-    if (s.op === "×" && Number.isInteger(A) && Number.isInteger(B) && A >= 10 && A % 10 === 0) return `${head}：先算 ${RS6H_N(A / 10)}×${RS6H_N(B)}＝${RS6H_N((A * B) / 10)}，再補一個 0＝□`;
-    if (s.op === "×" && !Number.isInteger(A) && Number.isInteger(B)) return `${head}：先不管小數點，算完再點回 ${rs6hDec(A)} 位小數＝□`;
-    return `${head}＝□`;
+    if (x.op === "×") {
+      let z = (v) => {
+          let k = 0;
+          while (Number.isInteger(v) && v >= 10 && v % 10 === 0) ((v /= 10), k++);
+          return [v, k];
+        },
+        [a1, k1] = z(A),
+        [b1, k2] = z(B);
+      if (Number.isInteger(A) && Number.isInteger(B) && k1 + k2 > 0) {
+        if (a1 === 1 || b1 === 1) return [`乘以 ${a1 === 1 ? a : b}，就是在後面補 ${a1 === 1 ? k1 : k2} 個 0：`, `${a}×${b}＝□`];
+        return [`先算 ${a1}×${b1}＝${N(a1 * b1)}`, `再在後面補 ${k1 + k2} 個 0：`, `${a}×${b}＝□`];
+      }
+      if (!Number.isInteger(A) && Number.isInteger(B)) {
+        let d = rs6hDec(A),
+          big = Math.round(A * 10 ** d);
+        return [`先不管小數點：${big}×${b}＝${N(big * B)}`, `再點回 ${d} 位小數：`, `${a}×${b}＝□`];
+      }
+    }
+    return [`${a}${x.op}${b}＝□`];
+  }
+  function rs6hL3(ex, ans) {
+    let tok = rs6hTok(ex);
+    if (!tok) return null;
+    let R = rs6hSteps(tok);
+    if (Math.abs(R.value - ans) > 1e-6 || !R.steps.length) return null;
+    let lines = [];
+    R.steps.slice(0, -1).forEach((x) => rs6hLine2(x).split("\n").forEach((l) => lines.includes(l) || lines.push(l)));
+    return [...lines, ...rs6hLast2(R.steps[R.steps.length - 1])].join("\n");
   }
   // 由「說明」裡找出算式（在「＝答案」前面的那一串）
   function rs6hExpr(ex, ans) {
@@ -7847,37 +7899,148 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     full = full.replace(/^[^\d\[]*?＝/, ""); // 「弧長＝20×…」→「20×…」
     return cands.length ? { cands, full } : null;
   }
-  function rs6hNumber(st, typeId, s) {
-    let old = st.hints || [],
-      ans = st.answer;
-    // 6-3「由圓周長找半徑」：要除以 3.14，另外寫
-    if (typeId === "S6" && /半徑是多少/.test(st.prompt) && s && s.C) {
-      let d = Math.round((s.C / 3.14) * 1e6) / 1e6;
-      return [old[0] || "圓周長＝直徑×3.14。", `直徑×3.14＝${RS6H_N(s.C)}，所以直徑＝${RS6H_N(s.C)}÷3.14；半徑＝直徑÷2。`, `看 ×3.14 小卡：3.14×${RS6H_N(d)}＝${RS6H_N(s.C)}，所以直徑是 ${RS6H_N(d)} 公尺，半徑是 ${RS6H_N(d)}÷2＝□`];
-    }
-    let E = rs6hExpr(st.explanation || "", ans);
-    if (E) {
-      for (let c of E.cands) {
-        let tok = rs6hTok(c);
-        if (!tok) continue;
-        let R = rs6hSteps(tok);
-        if (Math.abs(R.value - ans) > 1e-6 || !R.steps.length) continue;
-        let done = [...new Set(R.steps.slice(0, -1).map((x) => `${rs6hShow(x.a)}${x.op}${rs6hShow(x.b)}＝${RS6H_N(x.r.v)}`))],
-          last = rs6hLast(R.steps[R.steps.length - 1]),
-          l2 = (old[1] ? (/[。？！]$/.test(old[1]) ? old[1] : old[1] + "。") : "") + `算式：${E.full}。`;
-        return [old[0] || "先想這一步要找什麼。", l2, (done.length ? done.join("，") + "，" : "") + last];
+  // 數字題
+  function rs6hNum2(st, id, s, q, k) {
+    let N = RS6H_N,
+      ans = st.answer,
+      p = st.prompt || "",
+      E = rs6hExpr(st.explanation || "", ans),
+      ex = null;
+    for (let c of (E && E.cands) || []) {
+      let t = rs6hTok(c);
+      if (t && Math.abs(rs6hSteps(t).value - ans) < 1e-6) {
+        ex = c;
+        break;
       }
     }
-    // 找不到算式：把說明裡的答案換成 □
-    let ex = (st.explanation || "").split(RS6H_N(ans)).join("□");
-    return [old[0], old[1] || old[2], ex.includes("□") ? ex : old[2]];
+    let r = s.r,
+      a = s.a,
+      fr = a ? rs6hFrac(a) : [1, 1],
+      F = rs6hF(fr[0], fr[1]),
+      tk = ex ? rs6hTok(ex) : null,
+      ff = tk && tk[tk.length - 1].f ? tk[tk.length - 1].f : fr,
+      rest = ex && /3\.14/.test(ex) ? ex.replace(/×3\.14(?![\d.])/, "").replace(/^3\.14×/, "") : "",
+      order = rest && rest !== ex && /[×÷]/.test(rest) ? `先算 ${rest}，最後再乘 3.14。` : "",
+      addTip = ex && /^[\d.]+(?:[＋－][\d.]+)+$/.test(ex) ? (/\./.test(ex) ? "用直式算，小數點要對齊。" : "用直式算，個位對齊個位。") : "",
+      prev = k > 0 ? q.steps[k - 1] : null,
+      prevExpr = prev && prev.kind === "choice" && (prev.choices || []).some((c) => { let t = c.correct && rs6hTok(String(c.label).replace(/\s/g, "")); return t && t.length >= 3; }), // 上一步選的是算式（不是單一個分數）
+      Q = rs6hF(1, 4),
+      L1,
+      L2,
+      L3 = ex ? rs6hL3(ex, ans) : null,
+      expr = ex ? `算式是 ${ex}。` : "";
+    if (prevExpr && ex) ((L1 = expr), (L2 = order || addTip || "照算式，從左邊開始算。"));
+    else if (id === "S2" && k === 0) ((L1 = rs6hTwo("弧長＝直徑×3.14×幾分之幾。", `直徑是 ${r}×2＝${2 * r} 公尺，扇形是圓的 ${F}。`)), (L2 = rs6hTwo(expr, order)));
+    else if (id === "S2") ((L1 = rs6hTwo("周長＝弧長＋半徑＋半徑。", `弧長是 ${N(2 * r * 3.14 * fr[0] / fr[1])}，半徑是 ${r}。`)), (L2 = rs6hTwo(expr, addTip)));
+    else if (/整個圓，面積/.test(p)) ((L1 = rs6hTwo("圓面積＝半徑×半徑×3.14。", `半徑是 ${r} 公尺。`)), (L2 = rs6hTwo(expr, order)));
+    else if (id === "S4" || id === "S5") {
+      let b0 = tk ? N(tk[0].v) : "",
+        FF = rs6hF(ff[0], ff[1]);
+      L1 = /弧長/.test(p) ? rs6hTwo("弧長＝圓周長×幾分之幾。", `圓周長是 ${b0}，弧長是圓周長的 ${FF}。`) : rs6hTwo("扇形面積＝圓面積×幾分之幾。", `圓面積是 ${b0}，扇形是圓的 ${FF}。`);
+      L2 = rs6hTwo(expr, rs6hFracTip(ff[0], ff[1]));
+    } else if (id === "S6" && k === 0) {
+      let C = s.C,
+        d = Math.round((C / 3.14) * 1e6) / 1e6,
+        v = d,
+        z = 0;
+      while (v > 10 && v % 10 === 0) ((v /= 10), z++);
+      L1 = rs6hTwo("圓周長＝直徑×3.14。", `圓周長是 ${N(C)} 公尺。`);
+      L2 = rs6hTwo(`直徑＝${N(C)}÷3.14。`, "半徑＝直徑÷2。");
+      L3 = (z ? [`查 ×3.14 小卡：${N(v)}×3.14＝${N(v * 3.14)}`, `${N(d)}×3.14＝${N(C)}，所以直徑是 ${N(d)} 公尺。`] : [`查 ×3.14 小卡：${N(d)}×3.14＝${N(C)}`, `所以直徑是 ${N(d)} 公尺。`]).concat(`半徑：${N(d)}÷2＝□`).join("\n");
+    } else if (id === "S7" && /大扇形/.test(p)) ((L1 = rs6hTwo(`大扇形是 ${rs6hF(3, 4)} 個圓。`, `半徑是 ${r} 公尺。`)), (L2 = rs6hTwo(expr, order)));
+    else if (id === "S7" && s.r2) {
+      let big = (r * r * 3.14 * 3) / 4,
+        q2 = (s.r2 * s.r2) / 4,
+        small = q2 * 3.14;
+      L1 = rs6hTwo("澆得到的＝大扇形＋小扇形。", `大扇形是 ${N(big)}。`);
+      L2 = rs6hTwo(`小扇形是 ${Q} 個圓，半徑 ${s.r2} 公尺：`, `${s.r2}×${s.r2}×3.14×${Q}`);
+      L3 = [`${s.r2}×${s.r2}×${Q}＝${N(q2)}`, `${N(q2)}×3.14＝${N(small)}`, ...rs6hLast2({ a: { v: big }, op: "＋", b: { v: small } })].join("\n");
+    } else if (id === "S7") ((L1 = rs6hTwo(`澆得到的是 ${rs6hF(3, 4)} 個圓。`, `整個圓是 ${N(r * r * 3.14)} 平方公尺。`)), (L2 = rs6hTwo(expr, rs6hFracTip(3, 4))));
+    else if (id === "S8") {
+      let L = s.L,
+        w = 2 * r,
+        rect = L * w;
+      if (/長方形的面積/.test(p)) ((L1 = rs6hTwo("長方形的寬，就是半圓的直徑。", `直徑是 ${r}×2＝${w} 公尺。`)), (L2 = rs6hTwo("長方形面積＝長×寬。", `算式是 ${L}×${w}。`)));
+      else if (/弧合起來/.test(p)) ((L1 = "兩段半圓的弧合起來，是一個圓的圓周長。"), (L2 = rs6hTwo(`直徑是 ${w} 公尺。`, `算式是 ${w}×3.14。`)));
+      else if (/外圍/.test(p)) ((L1 = "外圍＝兩條直線＋兩段弧。"), (L2 = rs6hTwo(`兩條直線：${L}×2＝${2 * L}。`, `兩段弧合起來是 ${N(w * 3.14)}。`)));
+      else if ((s.n || 2) === 2) ((L1 = rs6hTwo("全部＝長方形＋兩個半圓。", `長方形是 ${rect} 平方公尺。`)), (L2 = rs6hTwo("兩個半圓合起來是一個圓：", `${r}×${r}×3.14＝${N(r * r * 3.14)}。`)));
+      else ((L1 = rs6hTwo("全部＝長方形＋半圓。", `長方形是 ${rect} 平方公尺。`)), (L2 = rs6hTwo("半圓是半個圓：", `${r}×${r}×3.14÷2＝${N((r * r * 3.14) / 2)}。`)));
+    } else if (id === "S9") {
+      let sd = s.s,
+        sq = sd * sd,
+        qc = (sq * 3.14) / 4;
+      if (/正方形的面積/.test(p)) ((L1 = rs6hTwo("正方形面積＝邊長×邊長。", `邊長是 ${sd} 公尺。`)), (L2 = expr));
+      else if (/圓的面積/.test(p)) ((L1 = rs6hTwo(`${Q} 圓的半徑，就是正方形的邊長。`, `半徑是 ${sd} 公尺。`)), (L2 = rs6hTwo(expr, order)));
+      else if (/先算正方形扣掉/.test(p)) ((L1 = rs6hTwo(`剩下的＝正方形－${Q} 圓。`, `正方形是 ${sd}×${sd}＝${sq}。`)), (L2 = rs6hTwo(`${Q} 圓是 ${sd}×${sd}×3.14×${Q}。`, `先算 ${Q} 圓，再用正方形減。`)));
+      else if (/葉子形/.test(p)) ((L1 = "葉子形＝正方形－兩塊剩下的部分。"), (L2 = rs6hTwo(`正方形是 ${sq}，每塊是 ${N(sq - qc)}。`, expr)));
+      else ((L1 = `剩下的部分＝正方形－${Q} 圓。`), (L2 = rs6hTwo(`正方形是 ${sq}，${Q} 圓是 ${N(qc)}。`, expr)));
+    } else if (id === "S10") {
+      if (/圓的面積/.test(p)) ((L1 = rs6hTwo(`${Q} 圓的面積＝圓面積×${Q}。`, `半徑是 ${r} 公尺。`)), (L2 = rs6hTwo(expr, order)));
+      else if (/三角形/.test(p)) ((L1 = rs6hTwo("三角形面積＝底×高÷2。", `底和高都是半徑 ${r} 公尺。`)), (L2 = expr));
+      else ((L1 = `弧形部分＝${Q} 圓－三角形。`), (L2 = rs6hTwo(`${Q} 圓是 ${N((r * r * 3.14) / 4)}，三角形是 ${N((r * r) / 2)}。`, expr)));
+    }
+    if (!L1 || !L2 || !L3) return null; // 找不到：沿用原本的提示
+    return [L1, L2, L3];
   }
-  function rs6hChoice(st) {
-    let old = st.hints || [],
-      bad = (st.choices || []).filter((c) => !c.correct && c.feedback).slice(0, 2);
-    if (bad.length < 2) return old;
-    let elim = `先刪掉兩個：「${bad[0].label}」（${bad[0].feedback.replace(/。$/, "")}）；「${bad[1].label}」（${bad[1].feedback.replace(/。$/, "")}）。`;
-    return [old[0], old[1], (old[2] ? (/[。？！]$/.test(old[2]) ? old[2] : old[2] + "。") : "") + elim];
+  // 選擇題（第 3 層另外在畫面上劃掉兩個錯的選項）
+  function rs6hChoice2(st, id, s, q, k) {
+    let p = st.prompt || "",
+      N = RS6H_N,
+      r = s.r,
+      a = s.a,
+      Q = rs6hF(1, 4);
+    if (/幾分之幾/.test(p) && !/面積是圓面積/.test(p)) {
+      let [n, d] = rs6hFrac(a);
+      return [
+        rs6hTwo(`塗色的扇形是 ${a}°，整個圓是 360°。`, /弧長/.test(p) ? "弧長占圓周長的幾分之幾，和扇形占整個圓的一樣。" : ""),
+        n === 1 ? "把圓切成和扇形一樣大的塊，數數看能切幾塊。" : "圖上把圓切成一樣大的塊，數數看：一共幾塊？塗色的有幾塊？",
+        `圓切成 ${d} 塊，塗色的是 ${n} 塊，所以是 □ 分之 ${n}。`,
+      ];
+    }
+    if (/面積是圓面積的幾分之幾/.test(p)) return ["扇形占整個圓的幾分之幾，面積就占圓面積的幾分之幾。", "這一步和第 1 步的比例一樣。", "看第 1 步選的答案，這一步選一樣的。"];
+    if (/弧長的算式/.test(p)) return [rs6hTwo("藍色的彎線是弧。", "弧長＝圓周長×幾分之幾。"), rs6hTwo("圓周長＝直徑×3.14。", `直徑是 ${r}×2＝${2 * r} 公尺。`), rs6hTwo(`弧長＝${2 * r}×3.14×□`, "□ 是第 1 步的答案。")];
+    if (/^面積的算式/.test(p)) return [rs6hTwo("要算的是塗色的這一整塊。", "扇形面積＝圓面積×幾分之幾。"), rs6hTwo("圓面積＝半徑×半徑×3.14。", `半徑是 ${r} 公尺。`), rs6hTwo(`扇形面積＝${r}×${r}×3.14×□`, "□ 是第 1 步的答案。")];
+    if (/扇形面積的算式/.test(p)) {
+      let R = N(s.C / 3.14 / 2);
+      return ["扇形面積＝圓面積×幾分之幾。", rs6hTwo("圓面積＝半徑×半徑×3.14。", `半徑是第 1 步算的 ${R} 公尺。`), rs6hTwo(`扇形面積＝${R}×${R}×3.14×□`, `□ 是 ${a}° 占 360° 的幾分之幾。`)];
+    }
+    if (/周長要怎麼算/.test(p)) return ["沿著扇形的邊走一圈。", "會走過一段彎的弧，和兩條直的線。", "兩條直的線都是半徑，兩條都要加。"];
+    if (id === "S7" && /什麼形狀/.test(p)) return ["一整圈是 360°，牆角擋住 90°。", "澆得到的角度＝360°－90°。", rs6hTwo("360°－90°＝□", "這就是澆得到的扇形的圓心角。")];
+    if (id === "S7" && /哪些部分/.test(p)) return ["看圖：牆角有大灑水器，牆另一頭還有小灑水器。", "大灑水器被牆擋住 90°，澆到 360°－90°。", rs6hTwo("大灑水器澆到 270° 的大扇形。", "小灑水器也有澆到，兩塊都要算。")];
+    if (/澆到的面積要怎麼算/.test(p)) {
+      let A = N(r * r * 3.14);
+      return [`整個圓的面積是 ${A}。`, "牆擋住 1 塊 90°，澆得到的是另外 3 塊 90°。", rs6hTwo(`澆到的面積＝${A}×□`, "□ 是 4 塊裡的 3 塊。")];
+    }
+    if (/半圓合起來/.test(p)) return ["看圖：兩端各有一個半圓。", "兩個半圓拼在一起，就是一個整圓。", `半徑還是 ${r} 公尺，所以是一個半徑 □ 公尺的圓。`];
+    if (/分成哪兩部分/.test(p)) return ["看圖：一邊是方的，一邊是彎的。", "方的部分是長方形，彎的部分是半圓。", "圖上只有一端是彎的，所以只有一個半圓。"];
+    if (/外圍一圈包含/.test(p)) return ["沿著外圍走一圈，會經過哪些線？", "長方形和半圓接起來的兩條邊在圖形裡面，不算外圍。", "外圍是兩條直線，加上兩段半圓的弧。"];
+    if (/全部的面積要怎麼算/.test(p)) {
+      let rect = s.L * 2 * r,
+        c = r * r * 3.14;
+      return ["全部的面積＝兩部分合起來。", (s.n || 2) === 2 ? `長方形是 ${rect}，兩個半圓合起來是 ${N(c)}。` : `長方形是 ${rect}，半圓是 ${N(c / 2)}。`, "合起來，就是把兩個面積加起來。"];
+    }
+    if (/葉子形的面積要怎麼算/.test(p)) {
+      let sq = s.s * s.s;
+      return ["看圖：正方形裡，葉子外面有幾塊？", `葉子外面有 2 塊，每塊都是 ${N(sq - (sq * 3.14) / 4)} 平方公尺。`, "葉子形＝正方形扣掉這 2 塊。"];
+    }
+    if (id === "S9") return [`看圖：正方形裡面有一個 ${Q} 圓。`, `${Q} 圓以外的地方，就是要算的部分。`, `用正方形的面積，扣掉 ${Q} 圓的面積。`];
+    if (id === "S10") return [`看圖：三角形在 ${Q} 圓的裡面。`, `${Q} 圓扣掉三角形，剩下的就是弧形。`, `用 ${Q} 圓的面積，扣掉三角形的面積。`];
+    return null;
+  }
+  // 圖的顏色跟著題目
+  var RS6H_COL = { "橘": "#f6c46b", "綠": "#9fd19a", "藍": "#a9c9ef", "白": "#ffffff", "黃": "#f5df6e", "紅": "#f0a59b" };
+  function rs6hCol(ctx, kind) {
+    if (kind === "sector" && /橘色/.test(ctx)) return { fill: RS6H_COL["橘"], fillHi: "#efaa3c" };
+    if (kind === "seg") {
+      let t = /三角形[是塗](.)色/.exec(ctx),
+        g = /弧形[是塗](.)色/.exec(ctx);
+      if (t || g) return { fill: (t && RS6H_COL[t[1]]) || RS_FIG_C.fill, fill2: (g && RS6H_COL[g[1]]) || RS_FIG_C.fill2, triName: t ? t[1] + "色" : "綠色", segName: g ? g[1] + "色" : "橘色" };
+    }
+    return null;
+  }
+  // 打開第 3 層提示後要劃掉的選項
+  function rsElimIds(st, cur) {
+    return st && st.elim && cur && (cur.hints[cur.step] || 0) >= 3 ? new Set((st.choices || []).filter((c) => st.elim.includes(String(c.label))).map((c) => c.id)) : new Set();
   }
   // 圖形要亮哪裡
   function rs6hHl(st, fig) {
@@ -7896,12 +8059,18 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       T.build = function (s) {
         let q = orig.call(this, s);
         try {
-          for (let st of q.steps) {
+          q.figure && (q.figure.col = rs6hCol(q.context || "", q.figure.kind) || void 0);
+          q.steps.forEach((st, k) => {
             st.hints0 = st.hints; // 原本的提示（測試、對照用）
-            st.hints = st.kind === "number" ? rs6hNumber(st, T.id, s) : rs6hChoice(st);
+            let h = st.kind === "number" ? rs6hNum2(st, T.id, s, q, k) : rs6hChoice2(st, T.id, s, q, k);
+            h && h.length === 3 && h.every(Boolean) && (st.hints = h);
             st.hl = rs6hHl(st, q.figure);
-            st.card314 = st.kind === "number" && st.hints.some((h) => /×\s*3\.14|3\.14\s*×/.test(String(h))); // v3.5.1：只有要乘 3.14 的步驟才有小卡
-          }
+            st.card314 = st.kind === "number" && st.hints.some((x) => /×\s*3\.14|3\.14\s*×/.test(String(x))); // v3.5.1：只有要乘 3.14 的步驟才有小卡
+            if (st.kind === "choice") {
+              let bad = (st.choices || []).filter((c) => !c.correct && c.feedback).slice(0, 2);
+              bad.length === 2 && (st.elim = bad.map((c) => String(c.label))); // 選項的 id 出題後才給，所以記選項文字
+            }
+          });
         } catch (e) {
           console.warn("提示改寫失敗", T.id, e);
         }
@@ -7923,7 +8092,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     }
     return el;
   }
-  window.__rs6h = { tok: rs6hTok, steps: rs6hSteps, pi: rs6hPi, expr: rs6hExpr, number: rs6hNumber, choice: rs6hChoice }; // 測試用
+  window.__rs6h = { tok: rs6hTok, steps: rs6hSteps, pi: rs6hPiLines, expr: rs6hExpr, number: rs6hNum2, choice: rs6hChoice2, col: rs6hCol }; // 測試用
   function rsNeedPassword() {
     return Ti().requirePassword === !0;
   }
@@ -37929,12 +38098,17 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     }
   }
 
+  // v3.5.2：地面乘色（紅、綠、藍）。全部設 1 就是 3.5.1 的淺灰。
+  var RS_GROUND_TINT = [1.356, 1.062, 0.731];
   function Of(s) {
     let e = new Re();
     s.add(e);
     let t = [],
       n = new ne(new Qe(300, 220), $s(Rh(), 300 / 8, 220 / 8));
     ((n.rotation.x = -Math.PI / 2), n.position.set(-8, 0, -6), (n.receiveShadow = !0), e.add(n));
+    // v3.5.2：跑道、球場四周的地面。2.12.0 換成色調映射後，原本看起來的米黃色變成淺灰；
+    // 乘上這個顏色，畫出來回到 2.9.0 以前的米黃（首頁鳥瞰量到約 RGB 220,199,165）。只影響這一片地面。
+    n.material.color.setRGB(RS_GROUND_TINT[0], RS_GROUND_TINT[1], RS_GROUND_TINT[2]);
     let { innerRadius: r, straightLength: a, lanes: o, laneWidth: c } = ln,
       l = r + o * c;
     (e.add($r(zh(new An(), r, a), Ch(1 / 6, 1 / 6), 0.02)),
@@ -40036,6 +40210,11 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       ".rs-al .choices.one .choice{min-height:66px;font-size:26px}",
       ".rs-al .choice .mark{width:30px;height:30px;margin-top:-15px;left:16px}",
       ".rs-al .choice.rs-reading{outline:4px solid #f2c14e;outline-offset:2px;background:#fff8df}",
+      // v3.5.2：第 3 層提示劃掉的選項；提示可以分行（一行一步）
+      ".choice.rs-elim{opacity:.5;background:#ecebe6!important;border-color:#cfcdc4!important;cursor:not-allowed;box-shadow:none!important}",
+      ".choice.rs-elim>span:not(.rs-elim-x):not(.sr){text-decoration:line-through;text-decoration-thickness:2px}",
+      ".choice .rs-elim-x{margin-left:auto;padding-left:10px;color:#a8322a;font-weight:700;font-size:1.1em}",
+      ".hints .hint .tx{white-space:pre-line}",
       ".rs-al .rs-alc-r .numbox .val{font-size:34px;min-height:68px;min-width:170px}",
       ".rs-al .rs-alc-r .numbox .unit{font-size:24px}",
       ".rs-al .rs-alc-r .numpad{max-width:440px;gap:8px}",
@@ -40401,6 +40580,8 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     btn.classList.add("on");
     let next = () => {
       if (RS_AL.reading !== tok) return;
+      let el = rsElimIds(step, P.cur); // v3.5.2：劃掉的選項不念
+      while (k < step.choices.length && el.has(step.choices[k].id)) k++;
       if (k >= step.choices.length) return rsAlStopRead(!0);
       let c = step.choices[k],
         text = `選項${k + 1}，${Gt(String(c.label))}`;
