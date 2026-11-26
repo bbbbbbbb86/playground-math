@@ -19,7 +19,7 @@
   var RS_MOVE = { walk: 5, run: 1.7, accel: 10, decel: 14, turn: 12, maxTurn: 14, dead: 0.12, minJoy: 0.35, stride: 1.3 };
   var ut = {
     name: "操場中的數學",
-    appVersion: "3.6.0",
+    appVersion: "3.7.0",
     teacherPassword: "8642",
     questionsPerSession: 9,
     questionsPerSessionOptions: [8, 9, 10],
@@ -2691,22 +2691,22 @@
         basic: [
           { ctx: "sprinkler", r: 10, a: 90 },
           { ctx: "bend", r: 20, a: 90 },
-          { ctx: "swing", r: 3, a: 90 },
+          { ctx: "court", r: 4, a: 90 },
           { ctx: "spin", r: 4, a: 45 },
-          { ctx: "mat", r: 3, a: 270 },
-          { ctx: "vzone", r: 5, a: 90 },
+          { ctx: "stone", r: 4, a: 270 },
+          { ctx: "vzone", r: 6, a: 90 },
         ],
         standard: [
-          { ctx: "softball", r: 30, a: 90 },
+          { ctx: "softball", r: 40, a: 90 },
           { ctx: "softball", r: 30, a: 120 },
-          { ctx: "sprinkler", r: 10, a: 270 },
+          { ctx: "sprinkler", r: 20, a: 270 },
           { ctx: "spin", r: 4, a: 90 },
           { ctx: "stone", r: 3, a: 120 },
           { ctx: "sprinkler", r: 20, a: 45 },
         ],
         challenge: [
-          { ctx: "softball", r: 30, a: 45 },
-          { ctx: "sprinkler", r: 20, a: 270 },
+          { ctx: "softball", r: 40, a: 45 },
+          { ctx: "softball", r: 40, a: 270 },
           { ctx: "spin", r: 5, a: 72 },
           { ctx: "bed", r: 10, a: 72 },
           { ctx: "nopark", r: 10, a: 90 },
@@ -2762,19 +2762,19 @@
       sets: {
         basic: [
           { ctx: "bed", r: 10, a: 90 },
-          { ctx: "mat", r: 2, a: 90 },
-          { ctx: "sprinkler", r: 10, a: 270 },
+          { ctx: "court", r: 4, a: 90 },
+          { ctx: "sprinkler", r: 20, a: 270 },
           { ctx: "stone", r: 4, a: 90 },
           { ctx: "court", r: 4, a: 45 },
-          { ctx: "vzone", r: 5, a: 90 },
+          { ctx: "vzone", r: 6, a: 90 },
         ],
         standard: [
-          { ctx: "softball", r: 30, a: 90 },
+          { ctx: "softball", r: 20, a: 90 },
           { ctx: "bed", r: 20, a: 45 },
-          { ctx: "sprinkler", r: 10, a: 270 },
-          { ctx: "stone", r: 5, a: 90 },
+          { ctx: "sprinkler", r: 4, a: 270 },
+          { ctx: "stone", r: 8, a: 90 },
           { ctx: "nopark", r: 5, a: 72 },
-          { ctx: "spin", r: 2, a: 90 },
+          { ctx: "court", r: 6, a: 90 },
         ],
         challenge: [
           { ctx: "softball", r: 30, a: 120 },
@@ -2836,147 +2836,179 @@
         };
       },
     }),
+    // ===== v3.6.0：6-2 照課本 P86 的題型重做（老師 11/26）；數字要簡單：「乘 3.14 之前的數」是 1～10 或整十、整百，可以直接查 ×3.14 小卡 =====
+    // 情境文字的變化：frac＝「1/4 圓的扇形」（不給圓心角）；dia＝給整個圓的直徑；gap＝圖上標的是缺掉那一塊的圓心角
+    rs6Txt = (s) => {
+      let c = rs6C[s.ctx],
+        r = s.r,
+        a = s.a,
+        F = rs6Fr(a),
+        t = c.text(r, a);
+      if (s.v === "frac" || s.v === "dia")
+        t = /是圓心角 \d+° 的扇形/.test(t)
+          ? t.replace(/是圓心角 \d+° 的扇形/, `是 ${F} 圓的扇形`)
+          : t.replace(/(一個|一塊)扇形的?/, `$1 ${F} 圓的扇形`).replace(/，圓心角 \d+°/, "");
+      if (s.v === "dia") t = t.replace(/半徑 (\d+) 公尺/, `直徑 ${2 * r} 公尺`);
+      if (s.v === "gap") t = s.ctx === "spin" ? `旋轉塔的圓形轉盤半徑 ${r} 公尺，沒有漆成橘色的部分是圓心角 ${360 - a}° 的扇形。` : t.replace(/，圓心角 \d+°。$/, `；整個圓缺了一塊，缺的那一塊圓心角是 ${360 - a}°。`);
+      return t;
+    },
+    // 扇形面積的算式（選擇）：錯的選項是弧長、用直徑、整個圓
+    rs6AreaPick = (r, a, prompt, expl, extra) =>
+      rs6Pick(
+        prompt || "面積的算式是哪一個？",
+        `${r}×${r}×3.14×${rs6Fr(a)}`,
+        [
+          extra || [`${2 * r}×3.14×${rs6Fr(a)}`, "這是弧長的算式。"],
+          [`${2 * r}×${2 * r}×3.14×${rs6Fr(a)}`, "圓面積是「半徑×半徑」×3.14，不是用直徑。"],
+          [`${r}×${r}×3.14`, "這是整個圓的面積，還要乘以扇形占的幾分之幾。"],
+        ],
+        expl || `扇形面積＝半徑×半徑×3.14×扇形占的幾分之幾＝${r}×${r}×3.14×${rs6Fr(a)}。`,
+        ["先想整個圓的面積：半徑×半徑×3.14。", `半徑是 ${r} 公尺。`, `扇形的面積是圓面積的 ${rs6Fr(a)}。`],
+      ),
+    rs6AreaNum = (r, a, extraWrong = []) => {
+      let A = rs6R(r * r * 3.14 * (a / 360)),
+        f = rs6Fr(a);
+      return rs6Num(
+        "扇形的面積是多少平方公尺？",
+        A,
+        "平方公尺",
+        [
+          { value: r * r * 3.14, text: "這是整個圓的面積，還要乘以扇形占的幾分之幾。" },
+          { value: 2 * r * 3.14 * (a / 360), text: "這是弧長，題目問的是面積。" },
+          { value: 4 * r * r * 3.14 * (a / 360), text: "要用半徑×半徑，不是直徑×直徑。" },
+          ...extraWrong,
+        ],
+        "扇形面積＝半徑×半徑×3.14×扇形占的幾分之幾。",
+        `${r}×${r}×3.14×${f}＝${qe(A)}，面積是 ${qe(A)} 平方公尺。`,
+        ["先約分、最後再乘 3.14。", `先算 ${r}×${r}×${f}＝${qe(rs6R((r * r * a) / 360))}。`, `${qe(rs6R((r * r * a) / 360))}×3.14＝□`],
+      );
+    },
     S3 = rs6Make({
       id: "S3",
       name: "扇形的面積",
       short: "面積＝半徑×半徑×3.14×幾分之幾",
       textbook: "6-2 扇形的面積",
       st: "grass",
+      // 課本 P86：圖上給半徑和圓心角（90°、135°、240°、300°）；或給「幾分之幾圓」（v: "frac"）
       sets: {
         basic: [
-          { ctx: "sprinkler", r: 10, a: 90 },
           { ctx: "bed", r: 4, a: 90 },
-          { ctx: "mat", r: 3, a: 90 },
-          { ctx: "court", r: 3, a: 90 },
+          { ctx: "court", r: 6, a: 90 },
           { ctx: "spin", r: 4, a: 45 },
-          { ctx: "vzone", r: 10, a: 270 },
+          { ctx: "stone", r: 6, a: 60, v: "frac" },
+          { ctx: "sprinkler", r: 20, a: 90 },
+          { ctx: "nopark", r: 5, a: 72 },
         ],
         standard: [
-          { ctx: "softball", r: 30, a: 60 },
-          { ctx: "sprinkler", r: 20, a: 90 },
-          { ctx: "bed", r: 10, a: 270 },
-          { ctx: "sprinkler", r: 20, a: 45 },
-          { ctx: "nopark", r: 5, a: 72 },
-          { ctx: "swing", r: 3, a: 120 },
+          { ctx: "softball", r: 30, a: 120 },
+          { ctx: "mat", r: 3, a: 240 },
+          { ctx: "bed", r: 6, a: 300 },
+          { ctx: "vzone", r: 10, a: 72 },
+          { ctx: "court", r: 4, a: 135 },
+          { ctx: "stone", r: 3, a: 120, v: "frac" },
         ],
         challenge: [
-          { ctx: "softball", r: 30, a: 120 },
           { ctx: "sprinkler", r: 20, a: 270 },
-          { ctx: "bed", r: 5, a: 72 },
-          { ctx: "spin", r: 4, a: 270 },
-          { ctx: "softball", r: 30, a: 45 },
-          { ctx: "stone", r: 10, a: 72 },
+          { ctx: "softball", r: 30, a: 240 },
+          { ctx: "bed", r: 8, a: 45, v: "frac" },
+          { ctx: "spin", r: 4, a: 135 },
+          { ctx: "sprinkler", r: 20, a: 72 },
+          { ctx: "court", r: 6, a: 300, v: "frac" },
         ],
       },
-      intro: (s) => `${rs6C[s.ctx].what}有多大？我們算算看扇形的面積。`,
+      intro: (s) => `${rs6C[s.ctx].what}有多大？我們算算看扇形的面积。`.replace("面积", "面積"),
       build(s) {
         let { r, a } = s,
-          c = rs6C[s.ctx],
           f = rs6Fr(a),
-          A = rs6R(r * r * 3.14 * (a / 360));
+          fr = s.v === "frac";
         return {
-          context: c.text(r, a),
+          context: rs6Txt(s),
           scene: rs6Sec(s),
-          figure: { kind: "sector", a, r },
+          figure: fr ? { kind: "sector", a, r, div: !0 } : { kind: "sector", a, r },
           steps: [
-            rs6FracStep(a),
-            rs6Pick(
-              "面積的算式是哪一個？",
-              `${r}×${r}×3.14×${f}`,
-              [
-                [`${2 * r}×3.14×${f}`, "這是弧長的算式。"],
-                [`${2 * r}×${2 * r}×3.14×${f}`, "圓面積是「半徑×半徑」×3.14，不是用直徑。"],
-                [`${r}×${r}×3.14`, "這是整個圓的面積，還要乘以扇形占的幾分之幾。"],
-              ],
-              `扇形面積＝半徑×半徑×3.14×[f:圓心角/360]＝${r}×${r}×3.14×${f}。`,
-              ["先想整個圓的面積：半徑×半徑×3.14。", `半徑是 ${r} 公尺。`, `扇形的面積是圓面積的 ${f}。`],
-            ),
-            rs6Num(
-              "扇形的面積是多少平方公尺？",
-              A,
-              "平方公尺",
-              [
-                { value: r * r * 3.14, text: "這是整個圓的面積，還要乘以扇形占的幾分之幾。" },
-                { value: 2 * r * 3.14 * (a / 360), text: "這是弧長，題目問的是面積。" },
-                { value: 4 * r * r * 3.14 * (a / 360), text: "要用半徑×半徑，不是直徑×直徑。" },
-              ],
-              "扇形面積＝半徑×半徑×3.14×[f:圓心角/360]。",
-              `${r}×${r}×3.14×${f}＝${qe(A)}，面積是 ${qe(A)} 平方公尺。`,
-              ["先約分、最後再乘 3.14。", `先算 ${r}×${r}×${f}＝${qe(rs6R((r * r * a) / 360))}。`, `${qe(rs6R((r * r * a) / 360))}×3.14＝□`],
-            ),
+            fr
+              ? rs6Pick(
+                  `這個扇形是 ${f} 圓，它的面積是整個圓面積的幾分之幾？`,
+                  f,
+                  [
+                    [bi(360, a), "反過來了。"],
+                    [bi(a, 180), `${f} 圓的扇形，面積就是整個圓的 ${f}。`],
+                    [bi(a, 720), `${f} 圓的扇形，面積就是整個圓的 ${f}。`],
+                  ],
+                  `${f} 圓的扇形，面積是整個圓面積的 ${f}。`,
+                  ["題目說這個扇形是幾分之幾圓？", `${f} 圓的扇形面積，就是圓面積的 ${f}。`, `所以是 ${f}。`],
+                )
+              : rs6FracStep(a),
+            rs6AreaPick(r, a),
+            rs6AreaNum(r, a),
           ],
         };
       },
     }),
     S4 = rs6Make({
       id: "S4",
-      name: "從圓面積求扇形面積",
-      short: "先算圓面積，再取幾分之幾",
+      name: "先找圓心角或半徑，再算面積",
+      short: "缺一塊的扇形、給直徑的扇形",
       textbook: "6-2 扇形的面積",
       st: "playground",
+      // 課本 P86：圖上標的是缺掉那一塊的圓心角（v: "gap"，先算 360°－缺的角度）；或「1/4 圓的扇形，直徑 12」（v: "dia"，先算半徑）
       sets: {
         basic: [
-          { ctx: "spin", r: 4, a: 90 },
-          { ctx: "sprinkler", r: 10, a: 270 },
-          { ctx: "court", r: 4, a: 45 },
-          { ctx: "stone", r: 4, a: 90 },
-          { ctx: "nopark", r: 5, a: 72 },
-          { ctx: "bed", r: 10, a: 90 },
+          { ctx: "spin", r: 3, a: 240, v: "gap" },
+          { ctx: "bed", r: 4, a: 90, v: "dia" },
+          { ctx: "court", r: 6, a: 60, v: "dia" },
+          { ctx: "stone", r: 6, a: 300, v: "gap" },
+          { ctx: "stone", r: 3, a: 120, v: "dia" },
+          { ctx: "nopark", r: 5, a: 72, v: "dia" },
         ],
         standard: [
-          { ctx: "softball", r: 30, a: 90 },
-          { ctx: "softball", r: 30, a: 120 },
-          { ctx: "bed", r: 10, a: 270 },
-          { ctx: "spin", r: 4, a: 270 },
-          { ctx: "spin", r: 5, a: 72 },
-          { ctx: "sprinkler", r: 20, a: 45 },
+          { ctx: "bed", r: 6, a: 300, v: "gap" },
+          { ctx: "softball", r: 20, a: 90, v: "dia" },
+          { ctx: "softball", r: 30, a: 240, v: "gap" },
+          { ctx: "bed", r: 4, a: 45, v: "dia" },
+          { ctx: "stone", r: 3, a: 240, v: "gap" },
+          { ctx: "court", r: 6, a: 90, v: "dia" },
         ],
         challenge: [
-          { ctx: "softball", r: 30, a: 45 },
-          { ctx: "sprinkler", r: 20, a: 270 },
-          { ctx: "bed", r: 5, a: 72 },
-          { ctx: "vzone", r: 10, a: 270 },
-          { ctx: "softball", r: 30, a: 60 },
-          { ctx: "sprinkler", r: 20, a: 72 },
+          { ctx: "softball", r: 20, a: 270, v: "gap" },
+          { ctx: "softball", r: 30, a: 120, v: "dia" },
+          { ctx: "court", r: 6, a: 300, v: "gap" },
+          { ctx: "bed", r: 20, a: 270, v: "dia" },
+          { ctx: "spin", r: 4, a: 135, v: "dia" },
+          { ctx: "bed", r: 3, a: 240, v: "gap" },
         ],
       },
-      intro: (s) => `要在${rs6C[s.ctx].what}上鋪東西，先算整個圓，再算扇形占多少。`,
+      intro: (s) => (s.v === "gap" ? "圖上標的角度是缺掉的那一塊，先算出塗色的圓心角。" : "題目給的是直徑，先算出半徑。"),
       build(s) {
         let { r, a } = s,
-          c = rs6C[s.ctx],
-          f = rs6Fr(a),
-          O = rs6R(r * r * 3.14),
-          A = rs6R(O * (a / 360));
+          g = 360 - a,
+          gap = s.v === "gap";
         return {
-          context: c.text(r, a),
+          context: rs6Txt(s),
           scene: rs6Sec(s),
-          figure: { kind: "sector", a, r },
+          figure: gap ? { kind: "sector", a, r, gap: !0 } : { kind: "sector", a, r: "?", div: !0 },
           steps: [
-            rs6Num(
-              `半徑 ${r} 公尺的整個圓，面積是多少平方公尺？`,
-              O,
-              "平方公尺",
-              [
-                { value: 2 * r * 3.14, text: "這是圓周長。圓面積＝半徑×半徑×3.14。" },
-                { value: 4 * r * r * 3.14, text: "要用半徑×半徑，不是直徑×直徑。" },
-              ],
-              "圓面積＝半徑×半徑×3.14。",
-              `${r}×${r}×3.14＝${qe(O)} 平方公尺。`,
-              ["圓面積＝半徑×半徑×3.14。", `${r}×${r}＝${r * r}`, `${r * r}×3.14＝□`],
-            ),
-            rs6FracStep(a),
-            rs6Num(
-              "扇形的面積是多少平方公尺？",
-              A,
-              "平方公尺",
-              [
-                { value: O, text: "這是整個圓，還要乘以扇形占的幾分之幾。" },
-                { value: O * (a / 100), text: "一整圈是 360°，要乘以 [f:圓心角/360]。" },
-              ],
-              "扇形面積＝圓面積×[f:圓心角/360]。",
-              `${qe(O)}×${f}＝${qe(A)}，扇形面積是 ${qe(A)} 平方公尺。`,
-              [`圓面積是 ${qe(O)}。`, `扇形是圓的 ${f}。`, `${qe(O)}×${f}＝□`],
-            ),
+            gap
+              ? rs6Num(
+                  "塗色的扇形，圓心角是幾度？",
+                  a,
+                  "度",
+                  [{ value: g, text: "這是缺掉的那一塊。塗色的圓心角＝360°－缺掉的角度。" }],
+                  "一整圈是 360°，塗色的圓心角＝360°－缺掉的角度。",
+                  `360－${g}＝${a}，塗色的扇形圓心角是 ${a}°。`,
+                  ["一整圈是 360°。", `缺掉的那一塊是 ${g}°。`, `360－${g}＝□`],
+                )
+              : rs6Num(
+                  "半徑是多少公尺？",
+                  r,
+                  "公尺",
+                  [{ value: 2 * r, text: "這是直徑。半徑＝直徑÷2。" }, { value: 4 * r, text: "半徑＝直徑÷2，不是乘以 2。" }],
+                  "半徑＝直徑÷2。",
+                  `${2 * r}÷2＝${r}，半徑是 ${r} 公尺。`,
+                  ["半徑＝直徑÷2。", `直徑是 ${2 * r} 公尺。`, `${2 * r}÷2＝□`],
+                ),
+            rs6AreaPick(r, a, null, null, gap ? [`${r}×${r}×3.14×${rs6Fr(g)}`, "這是缺掉那一塊的面積，要算的是塗色的部分。"] : null),
+            rs6AreaNum(r, a, gap ? [{ value: r * r * 3.14 * (g / 360), text: "這是缺掉那一塊的面積，要算的是塗色的部分。" }] : []),
           ],
         };
       },
@@ -2994,19 +3026,19 @@
           { ctx: "spin", a: 90, O: 12.56, ask: "area" },
           { ctx: "bed", a: 45, C: 25.12, ask: "len" },
           { ctx: "stone", a: 72, O: 78.5, ask: "area" },
-          { ctx: "vzone", a: 90, C: 31.4, ask: "len" },
+          { ctx: "vzone", a: 90, C: 25.12, ask: "len" },
           { ctx: "court", a: 90, C: 12.56, ask: "len" },
         ],
         standard: [
           { ctx: "softball", a: 120, C: 188.4, ask: "len" },
-          { ctx: "sprinkler", a: 270, O: 314, ask: "area" },
+          { ctx: "sprinkler", a: 270, O: 1256, ask: "area" },
           { ctx: "bed", a: 72, C: 62.8, ask: "len" },
           { ctx: "spin", a: 45, O: 50.24, ask: "area" },
           { ctx: "nopark", a: 90, C: 25.12, ask: "len" },
-          { ctx: "softball", a: 60, O: 2826, ask: "area" },
+          { ctx: "stone", a: 60, O: 113.04, ask: "area" },
         ],
         challenge: [
-          { ctx: "softball", a: 45, C: 188.4, ask: "len" },
+          { ctx: "softball", a: 45, C: 125.6, ask: "len" },
           { ctx: "sprinkler", a: 270, C: 125.6, ask: "len" },
           { ctx: "bed", a: 72, O: 78.5, ask: "area" },
           { ctx: "softball", a: 120, O: 2826, ask: "area" },
@@ -3083,83 +3115,73 @@
     S6 = rs6Make({
       id: "S6",
       name: "由圓周長求扇形面積",
-      short: "先找半徑，再算面積",
-      textbook: "6-3 圓心角、周長和面積的關係",
+      short: "先找直徑、半徑，再算面積",
+      textbook: "6-2 扇形的面積（試試看）",
       st: "grass",
+      // v3.6.0：放在 6-2 的第 8 題（老師 11/26）。步驟拆開：直徑→半徑→選算式→算面積；圖上畫整個圓、標圓周長
+      // 數字要簡單：直徑 6、8、10、20、40、60（圓周長可以查 ×3.14 小卡倒回來），「半徑×半徑×幾分之幾」是 1～10 或整十、整百
       sets: {
         basic: [
-          { ctx: "sprinkler", C: 62.8, a: 90 },
-          { ctx: "spin", C: 25.12, a: 90 },
+          { ctx: "bed", C: 25.12, a: 90 },
           { ctx: "court", C: 18.84, a: 120 },
-          { ctx: "bed", C: 31.4, a: 72 },
-          { ctx: "stone", C: 18.84, a: 90 },
-          { ctx: "vzone", C: 62.8, a: 270 },
+          { ctx: "vzone", C: 31.4, a: 72 },
+          { ctx: "spin", C: 25.12, a: 45 },
+          { ctx: "nopark", C: 62.8, a: 72 },
+          { ctx: "sprinkler", C: 125.6, a: 90 },
         ],
         standard: [
-          { ctx: "softball", C: 188.4, a: 60 },
-          { ctx: "sprinkler", C: 125.6, a: 90 },
-          { ctx: "bed", C: 62.8, a: 270 },
-          { ctx: "spin", C: 25.12, a: 270 },
-          { ctx: "nopark", C: 31.4, a: 72 },
-          { ctx: "spin", C: 25.12, a: 45 },
+          { ctx: "softball", C: 188.4, a: 120 },
+          { ctx: "sprinkler", C: 125.6, a: 270 },
+          { ctx: "bed", C: 18.84, a: 240 },
+          { ctx: "spin", C: 25.12, a: 135 },
+          { ctx: "vzone", C: 62.8, a: 72 },
+          { ctx: "bed", C: 125.6, a: 45 },
         ],
         challenge: [
-          { ctx: "softball", C: 188.4, a: 45 },
-          { ctx: "sprinkler", C: 125.6, a: 270 },
-          { ctx: "sprinkler", C: 157, a: 72 },
-          { ctx: "vzone", C: 62.8, a: 72 },
-          { ctx: "stone", C: 31.4, a: 270 },
-          { ctx: "softball", C: 188.4, a: 120 },
+          { ctx: "softball", C: 188.4, a: 240 },
+          { ctx: "sprinkler", C: 125.6, a: 72 },
+          { ctx: "bed", C: 25.12, a: 135 },
+          { ctx: "stone", C: 31.4, a: 72 },
+          { ctx: "court", C: 18.84, a: 240 },
+          { ctx: "bed", C: 125.6, a: 270 },
         ],
       },
-      intro: () => "只知道圓周長，要怎麼算扇形面積？先把半徑找出來。",
+      intro: () => "只知道圓周長，要怎麼算扇形面積？先找直徑，再找半徑。",
       build(s) {
         let { C, a } = s,
           c = rs6C[s.ctx],
           f = rs6Fr(a),
-          r = rs6R(C / 6.28),
-          A = rs6R(r * r * 3.14 * (a / 360)),
-          base = c.text(r, a).replace(/半徑 \d+ 公尺，|水可以噴到 \d+ 公尺遠，|繩子長 \d+ 公尺，/, "");
+          d = rs6R(C / 3.14),
+          r = rs6R(d / 2),
+          base = c.text(r, a).replace(/半徑 \d+ 公尺，|水可以噴到 \d+ 公尺遠，|繩子長 \d+ 公尺，/, "").replace(/轉盤半徑 \d+ 公尺，/, "轉盤");
         return {
           context: `${base}整個圓的周長是 ${qe(C)} 公尺。`,
           scene: rs6Sec({ a, r }),
-          figure: { kind: "sector", a, r: "?" },
+          figure: { kind: "sector", a, r: "?", C },
           steps: [
+            rs6Num(
+              "整個圓的直徑是多少公尺？",
+              d,
+              "公尺",
+              [
+                { value: r, text: "這是半徑。這一步先算直徑：直徑＝圓周長÷3.14。" },
+                { value: C / 2, text: "圓周長＝直徑×3.14，要除以 3.14。" },
+              ],
+              "圓周長＝直徑×3.14，所以直徑＝圓周長÷3.14。",
+              `${qe(C)}÷3.14＝${qe(d)}，直徑是 ${qe(d)} 公尺。`,
+              ["圓周長＝直徑×3.14。", `直徑＝${qe(C)}÷3.14。`, `${qe(C)}÷3.14＝□`],
+            ),
             rs6Num(
               "半徑是多少公尺？",
               r,
               "公尺",
-              [
-                { value: C / 3.14, text: "這是直徑。半徑＝直徑÷2。" },
-                { value: C / 2, text: "要先除以 3.14 得到直徑，再除以 2。" },
-              ],
-              "圓周長＝直徑×3.14，所以直徑＝圓周長÷3.14，半徑＝直徑÷2。",
-              `${qe(C)}÷3.14＝${qe(rs6R(C / 3.14))}（直徑），${qe(rs6R(C / 3.14))}÷2＝${qe(r)}，半徑是 ${qe(r)} 公尺。`,
-              ["圓周長＝直徑×3.14。", `直徑＝${qe(C)}÷3.14。`, "半徑＝直徑÷2。"],
+              [{ value: d, text: "這是直徑。半徑＝直徑÷2。" }],
+              "半徑＝直徑÷2。",
+              `${qe(d)}÷2＝${qe(r)}，半徑是 ${qe(r)} 公尺。`,
+              ["半徑＝直徑÷2。", `直徑是 ${qe(d)} 公尺。`, `${qe(d)}÷2＝□`],
             ),
-            rs6Pick(
-              "扇形面積的算式是哪一個？",
-              `${qe(r)}×${qe(r)}×3.14×${f}`,
-              [
-                [`${qe(C)}×${f}`, "這是弧長，不是面積。"],
-                [`${qe(r * 2)}×${qe(r * 2)}×3.14×${f}`, "要用半徑×半徑。"],
-                [`${qe(r)}×${qe(r)}×3.14`, "這是整個圓的面積，還要乘以扇形占的幾分之幾。"],
-              ],
-              `扇形面積＝半徑×半徑×3.14×[f:圓心角/360]。`,
-              ["先找到半徑，再用面積公式。", `半徑是 ${qe(r)} 公尺。`, `扇形是圓的 ${f}。`],
-            ),
-            rs6Num(
-              "扇形的面積是多少平方公尺？",
-              A,
-              "平方公尺",
-              [
-                { value: C * (a / 360), text: "這是弧長，題目問的是面積。" },
-                { value: r * r * 3.14, text: "這是整個圓的面積，還要乘以幾分之幾。" },
-              ],
-              "扇形面積＝半徑×半徑×3.14×[f:圓心角/360]。",
-              `${qe(r)}×${qe(r)}×3.14×${f}＝${qe(A)} 平方公尺。`,
-              [`半徑是 ${qe(r)} 公尺。`, `先算 ${qe(r)}×${qe(r)}×${f}。`, "最後再乘 3.14。"],
-            ),
+            rs6AreaPick(r, a, "扇形面積的算式是哪一個？", null, [`${qe(C)}×${f}`, "這是弧長，不是面積。"]),
+            rs6AreaNum(r, a, [{ value: C * (a / 360), text: "這是弧長，題目問的是面積。" }]),
           ],
         };
       },
@@ -3183,28 +3205,28 @@
       // given：直接給整個圓的面積（基礎）；r2：牆另一頭小灑水器的半徑（挑戰）
       sets: {
         basic: [
-          { at: "equipment", r: 10, given: !0 },
-          { at: "stage", r: 20, given: !0 },
+          { at: "equipment", r: 20, given: !0 },
+          { at: "stage", r: 4, given: !0 },
           { at: "recycle", r: 4, given: !0 },
-          { at: "gazebo", r: 8, given: !0 },
-          { at: "court", r: 6, given: !0 },
-          { at: "volley", r: 10, given: !0 },
+          { at: "gazebo", r: 20, given: !0 },
+          { at: "court", r: 4, given: !0 },
+          { at: "volley", r: 20, given: !0 },
         ],
         standard: [
           { at: "equipment", r: 20 },
-          { at: "stage", r: 10 },
-          { at: "recycle", r: 6 },
+          { at: "stage", r: 4 },
+          { at: "recycle", r: 20 },
           { at: "gazebo", r: 4 },
-          { at: "court", r: 8 },
+          { at: "court", r: 4 },
           { at: "volley", r: 20 },
         ],
         challenge: [
-          { at: "equipment", r: 10, r2: 2 },
-          { at: "stage", r: 20, r2: 10 },
+          { at: "equipment", r: 20, r2: 4 },
+          { at: "stage", r: 20, r2: 6 },
           { at: "recycle", r: 4, r2: 2 },
-          { at: "gazebo", r: 8, r2: 2 },
+          { at: "gazebo", r: 20, r2: 6 },
           { at: "court", r: 20, r2: 4 },
-          { at: "volley", r: 10, r2: 4 },
+          { at: "volley", r: 20, r2: 4 },
         ],
       },
       intro: () => "灑水器在牆角，牆會擋住一部分。澆得到的地方是什麼形狀？",
@@ -4667,7 +4689,7 @@
     }),
     Su7 = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10],
     Su = [$f, em, tm, nm, im, sm, rm, am, om];    Su = [$f, em, tm, nm, im, sm, rm, am, om];
-  var wc = { ratio: { version: "ratio-v6", types: Su }, sector: { version: "sector-v6", types: Su6 }, speed: { version: "speed-v3", types: Su7 } };
+  var wc = { ratio: { version: "ratio-v6", types: Su }, sector: { version: "sector-v7", types: Su6 }, speed: { version: "speed-v3", types: Su7 } };
   window.__RSBANK = { wc, ua, cm, ha };
   function is(s) {
     return wc[s] || null;
@@ -4870,8 +4892,8 @@
     { id: "5-4", unit: "ratio", name: "最簡單整數比", types: ["T5", "T6"] },
     { id: "5-5", unit: "ratio", name: "比的應用", types: ["T7", "T9"] },
     { id: "6-1", unit: "sector", name: "扇形的弧長和周長", types: ["S1", "S2"] },
-    { id: "6-2", unit: "sector", name: "扇形的面積", types: ["S3", "S4"] },
-    { id: "6-3", unit: "sector", name: "圓心角、周長和面積的關係", types: ["S5", "S6"] },
+    { id: "6-2", unit: "sector", name: "扇形的面積", types: ["S3", "S4", "S6"], rot: ["S3", "S4"], last: "S6" }, // v3.6.0：前面輪流出 S3、S4，最後一題（第 8 題）是 S6 由圓周長求扇形面積
+    { id: "6-3", unit: "sector", name: "圓心角、周長和面積的關係", types: ["S5"] }, // v3.6.0：S6 移到 6-2 的第 8 題
     { id: "6-4", unit: "sector", name: "複合圖形（一）", types: ["S7", "S8"] },
     { id: "6-5", unit: "sector", name: "複合圖形（二）", types: ["S9", "S10"] },
     { id: "7-1", unit: "speed", name: "透過距離或時間比較快慢", types: ["V1", "V2"] },
@@ -6772,13 +6794,13 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       u = f.u || "公尺";
     if (f.kind === "sector") {
       let a = f.a,
-        whole = a > 180 || f.hl === "frac" || f.hl === "circle", // v3.4.0：問「幾分之幾」時，整個圓都畫出來；v3.6.0：先算整個圓那一步也是
+        whole = a > 180 || f.hl === "frac" || f.hl === "circle" || f.div || f.gap || f.C, // v3.4.0：問「幾分之幾」時，整個圓都畫出來；v3.6.0：先算整個圓、幾分之幾圓、缺一塊、給圓周長也是
         R = whole ? 88 : a > 90 ? 100 : 150,
         cx = whole ? 160 : a > 90 ? 160 : 70,
         cy = whole ? 108 : a > 90 ? 175 : 185,
         a0 = a > 180 ? 90 : 0;
       // v3.5.1：整個圓放得進圖框時才畫虛線圓（放不進去會只剩一小段，像多畫的線）
-      (a > 180 || f.hl === "frac") && path(rsArcPath(cx, cy, R, 0, 360), "none", { dash: !0, w: 1.5, stroke: "#9aa38c" });
+      (a > 180 || f.hl === "frac" || f.div || f.gap || f.C) && path(rsArcPath(cx, cy, R, 0, 360), "none", { dash: !0, w: 1.5, stroke: "#9aa38c" });
       // v3.6.0：「先算整個圓」那一步，整個圓都塗色，扇形的兩條邊畫虛線（還不用乘分數）
       f.hl === "circle"
         ? (path(rsArcPath(cx, cy, R, 0, 360), C.fill),
@@ -6787,9 +6809,11 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       // v3.4.0：跟著步驟標出要看的地方
       let P = (deg) => [cx + R * Math.cos((deg * Math.PI) / 180), cy - R * Math.sin((deg * Math.PI) / 180)];
       // v3.5.0：切成幾塊的虛線會直接透露答案，打開第 2 層提示才畫
-      if (f.hl === "frac" && f.reveal) {
+      let sliceQ = 0; // v3.7.0：畫了切塊時，角度的字放在中間那一塊裡，不要壓到切塊的虛線
+      if ((f.hl === "frac" && f.reveal) || f.div) { // v3.6.0：「幾分之幾圓」的題目，一開始就畫切塊（課本的畫法）
         let g = (x, y) => (y ? g(y, x % y) : x),
           q = 360 / g(a, 360);
+        q <= 12 && (sliceQ = q);
         if (q <= 12)
           for (let k = 0; k < q; k++) {
             let [x, y] = P(a0 + (k * 360) / q);
@@ -6812,7 +6836,17 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         lw = 9 * String(a).length + 8,
         rl = Math.hypot(lw / 2, 9) + (f.hl === "radius" || f.hl === "per" ? 6 : 3),
         dd = a >= 180 ? 26 : Math.min(R * 0.62, Math.max(26, rl / Math.sin(((a / 2) * Math.PI) / 180)));
-      txt(cx + dd * Math.cos(mid), cy - dd * Math.sin(mid), `${a}°`, { color: C.red });
+      if (sliceQ > 1) {
+        let sw = 360 / sliceQ, n = Math.round((a * sliceQ) / 360);
+        mid = ((a0 + (Math.floor(n / 2) + 0.5) * sw) * Math.PI) / 180;
+        dd = Math.min(R * 0.62, Math.max(26, rl / Math.sin(((sw / 2) * Math.PI) / 180)));
+      }
+      if (f.gap) {
+        // v3.6.0：課本的畫法：圖上標的是缺掉那一塊的圓心角
+        let gm = ((a0 + a + (360 - a) / 2) * Math.PI) / 180;
+        txt(cx + 34 * Math.cos(gm), cy - 34 * Math.sin(gm), `${360 - a}°`, { color: C.red });
+      } else f.div || txt(cx + dd * Math.cos(mid), cy - dd * Math.sin(mid), `${a}°`, { color: C.red });
+      f.C && txt(cx, cy + R + 16, `整個圓的周長 ${f.C} ${u}`, { size: 14 }); // v3.6.0：由圓周長求面積
       let ra = (a0 * Math.PI) / 180;
       // 半徑的字：一般放在水平半徑下面；大於 180° 時半徑是直的，字放在線的左邊
       // 第 2 層提示畫出切塊的虛線時，「幾分之幾」用不到半徑，字拿掉以免壓到虛線
@@ -7907,6 +7941,23 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
   function rs6hL3(ex, ans) {
     let tok = rs6hTok(ex);
     if (!tok) return null;
+    // v3.6.0：「圓周長或圓面積×幾分之幾」，先看出它是幾×3.14，再用 ×3.14 小卡算（不用做小數除法）
+    if (tok.length === 3 && tok[1].op === "×" && tok[2].f && !Number.isInteger(tok[0].v)) {
+      let X = tok[0].v,
+        k = Math.round((X / 3.14) * 1e6) / 1e6,
+        [n, d] = tok[2].f,
+        m = Math.round(((k * n) / d) * 1e6) / 1e6;
+      if (Number.isInteger(k) && Math.abs(m * 3.14 - ans) < 1e-6) {
+        let v = k,
+          z = 0;
+        while (v > 10 && v % 10 === 0) ((v /= 10), z++);
+        return [
+          z ? `查 ×3.14 小卡：${v}×3.14＝${RS6H_N(v * 3.14)}，所以 ${RS6H_N(X)}＝${k}×3.14` : `查 ×3.14 小卡：${RS6H_N(X)}＝${k}×3.14`,
+          `${k}×${rs6hF(n, d)}＝${RS6H_N(m)}`,
+          ...rs6hPiLines(m),
+        ].join("\n");
+      }
+    }
     let R = rs6hSteps(tok);
     if (Math.abs(R.value - ans) > 1e-6 || !R.steps.length) return null;
     let lines = [];
@@ -7969,20 +8020,33 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     else if (id === "S2" && k === 0) ((L1 = rs6hTwo("弧長＝直徑×3.14×幾分之幾。", `直徑是 ${r}×2＝${2 * r} 公尺，扇形是圓的 ${F}。`)), (L2 = rs6hTwo(expr, order)));
     else if (id === "S2") ((L1 = rs6hTwo("周長＝弧長＋半徑＋半徑。", `弧長是 ${N(2 * r * 3.14 * fr[0] / fr[1])}，半徑是 ${r}。`)), (L2 = rs6hTwo(expr, addTip)));
     else if (/整個圓，面積/.test(p)) ((L1 = `這一步先算整個圓，還不用乘分數。\n圓面積＝半徑×半徑×3.14。\n半徑是 ${r} 公尺。`), (L2 = rs6hTwo(expr, order)));
-    else if (id === "S4" || id === "S5") {
+    else if (id === "S5") {
       let b0 = tk ? N(tk[0].v) : "",
         FF = rs6hF(ff[0], ff[1]);
       L1 = /弧長/.test(p) ? rs6hTwo("弧長＝圓周長×幾分之幾。", `圓周長是 ${b0}，弧長是圓周長的 ${FF}。`) : rs6hTwo("扇形面積＝圓面積×幾分之幾。", `圓面積是 ${b0}，扇形是圓的 ${FF}。`);
       L2 = rs6hTwo(expr, rs6hFracTip(ff[0], ff[1]));
-    } else if (id === "S6" && k === 0) {
+    } else if (/直徑是多少/.test(p) && s.C) {
+      // v3.6.0：由圓周長求面積（6-2 第 8 題）第 1 步：先算直徑
       let C = s.C,
         d = Math.round((C / 3.14) * 1e6) / 1e6,
         v = d,
         z = 0;
       while (v > 10 && v % 10 === 0) ((v /= 10), z++);
       L1 = rs6hTwo("圓周長＝直徑×3.14。", `圓周長是 ${N(C)} 公尺。`);
-      L2 = rs6hTwo(`直徑＝${N(C)}÷3.14。`, "半徑＝直徑÷2。");
-      L3 = (z ? [`查 ×3.14 小卡：${N(v)}×3.14＝${N(v * 3.14)}`, `${N(d)}×3.14＝${N(C)}，所以直徑是 ${N(d)} 公尺。`] : [`查 ×3.14 小卡：${N(d)}×3.14＝${N(C)}`, `所以直徑是 ${N(d)} 公尺。`]).concat(`半徑：${N(d)}÷2＝□`).join("\n");
+      L2 = rs6hTwo("直徑＝圓周長÷3.14。", `算式是 ${N(C)}÷3.14。`);
+      // 不直接寫出直徑：讓學生在小卡上找
+      L3 = [z ? `在 ×3.14 小卡上找 ${N(v * 3.14)}，再想要補幾個 0：` : `在 ×3.14 小卡上找 ${N(C)}：`, `□×3.14＝${N(C)}`, `所以 ${N(C)}÷3.14＝□`].join("\n");
+    } else if (/半徑是多少/.test(p) && (s.C || s.v === "dia")) {
+      // v3.6.0：給直徑、或上一步算出直徑：半徑＝直徑÷2
+      let d = s.C ? Math.round((s.C / 3.14) * 1e6) / 1e6 : 2 * r;
+      L1 = "半徑＝直徑÷2。";
+      L2 = rs6hTwo(s.C ? `直徑是第 1 步算的 ${N(d)} 公尺。` : `題目給的直徑是 ${N(d)} 公尺。`, `算式是 ${N(d)}÷2。`);
+      L3 = `${N(d)}÷2＝□`;
+    } else if (/圓心角是幾度/.test(p) && s.v === "gap") {
+      // v3.6.0：圖上標的是缺掉那一塊的角度
+      L1 = rs6hTwo("一整圈是 360°。", `缺掉的那一塊是 ${360 - a}°。`);
+      L2 = "塗色的圓心角＝360°－缺掉的角度。";
+      L3 = `360－${360 - a}＝□`;
     } else if (id === "S7" && /大扇形/.test(p)) ((L1 = rs6hTwo(`大扇形是 ${rs6hF(3, 4)} 個圓。`, `半徑是 ${r} 公尺。`)), (L2 = rs6hTwo(expr, order)));
     else if (id === "S7" && s.r2) {
       let big = (r * r * 3.14 * 3) / 4,
@@ -8025,6 +8089,10 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       r = s.r,
       a = s.a,
       Q = rs6hF(1, 4);
+    if (/這個扇形是 .*圓，它的面積/.test(p)) {
+      let [n, d] = rs6hFrac(a);
+      return ["題目說這個扇形是幾分之幾圓？", `${rs6hF(n, d)} 圓的扇形，面積就是整個圓的 ${rs6hF(n, d)}。`, `所以是 □ 分之 ${n}。`];
+    }
     if (/幾分之幾/.test(p) && !/面積是圓面積/.test(p)) {
       let [n, d] = rs6hFrac(a);
       return [
@@ -8035,10 +8103,15 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     }
     if (/面積是圓面積的幾分之幾/.test(p)) return ["扇形占整個圓的幾分之幾，面積就占圓面積的幾分之幾。", "這一步和第 1 步的比例一樣。", "看第 1 步選的答案，這一步選一樣的。"];
     if (/弧長的算式/.test(p)) return [rs6hTwo("藍色的彎線是弧。", "弧長＝圓周長×幾分之幾。"), rs6hTwo("圓周長＝直徑×3.14。", `直徑是 ${r}×2＝${2 * r} 公尺。`), rs6hTwo(`弧長＝${2 * r}×3.14×□`, "□ 是第 1 步的答案。")];
-    if (/^面積的算式/.test(p)) return [rs6hTwo("要算的是塗色的這一整塊。", "扇形面積＝圓面積×幾分之幾。"), rs6hTwo("圓面積＝半徑×半徑×3.14。", `半徑是 ${r} 公尺。`), rs6hTwo(`扇形面積＝${r}×${r}×3.14×□`, "□ 是第 1 步的答案。")];
+    if (/^面積的算式/.test(p)) {
+      let [n, d] = rs6hFrac(a),
+        F = rs6hF(n, d),
+        last = s.v === "dia" ? `題目說是 ${F} 圓，□ 就是 ${F}。` : s.v === "gap" ? `□ 是塗色的 ${a}° 占 360° 的幾分之幾。` : "□ 是第 1 步的答案。";
+      return [rs6hTwo("要算的是塗色的這一整塊。", "扇形面積＝圓面積×幾分之幾。"), rs6hTwo("圓面積＝半徑×半徑×3.14。", s.v === "dia" ? `半徑是第 1 步算的 ${r} 公尺。` : `半徑是 ${r} 公尺。`), rs6hTwo(`扇形面積＝${r}×${r}×3.14×□`, last)];
+    }
     if (/扇形面積的算式/.test(p)) {
       let R = N(s.C / 3.14 / 2);
-      return ["扇形面積＝圓面積×幾分之幾。", rs6hTwo("圓面積＝半徑×半徑×3.14。", `半徑是第 1 步算的 ${R} 公尺。`), rs6hTwo(`扇形面積＝${R}×${R}×3.14×□`, `□ 是 ${a}° 占 360° 的幾分之幾。`)];
+      return ["扇形面積＝圓面積×幾分之幾。", rs6hTwo("圓面積＝半徑×半徑×3.14。", `半徑是第 2 步算的 ${R} 公尺。`), rs6hTwo(`扇形面積＝${R}×${R}×3.14×□`, `□ 是 ${a}° 占 360° 的幾分之幾。`)];
     }
     if (/周長要怎麼算/.test(p)) return ["沿著扇形的邊走一圈。", "會走過一段彎的弧，和兩條直的線。", "兩條直的線都是半徑，兩條都要加。"];
     if (id === "S7" && /什麼形狀/.test(p)) return ["一整圈是 360°，牆角擋住 90°。", "澆得到的角度＝360°－90°。", rs6hTwo("360°－90°＝□", "這就是澆得到的扇形的圓心角。")];
@@ -8081,7 +8154,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
   // 圖形要亮哪裡
   function rs6hHl(st, fig) {
     let p = st.prompt || "";
-    if (st.kind === "number" && /整個圓/.test(p)) return "circle"; // v3.6.0
+    if (st.kind === "number" && /整個圓.*面積/.test(p)) return "circle"; // v3.6.0
     if (/幾分之幾/.test(p)) return "frac";
     if (!fig || fig.kind !== "sector") return /什麼形狀|哪些部分|哪兩部分|怎麼算/.test(p) ? "parts" : "num";
     if (/周長|繩子|外圍/.test(p)) return "per";
@@ -8105,7 +8178,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
             // v3.6.0：答對算出半徑後，圖上的「? 公尺」換成算出來的數（老師 11/26）
             st.kind === "number" && /半徑是多少/.test(st.prompt || "") && (st.figSet = { r: RS6H_N(st.answer) });
             // v3.6.0：上一步先算整個圓，這一步圖下面寫要乘幾分之幾
-            if (k > 0 && /整個圓/.test(q.steps[k - 1].prompt || "") && st.kind === "number") {
+            if (k > 0 && /整個圓.*面積/.test(q.steps[k - 1].prompt || "") && st.kind === "number") {
               let fr = s.a ? rs6hFrac(s.a) : T.id === "S7" ? [3, 4] : null;
               fr && (st.figcap = `${T.id === "S7" ? "澆得到的是" : "扇形是"}整個圓的 ${fr[0]}/${fr[1]}，要乘 ${fr[0]}/${fr[1]}`);
             }
@@ -8894,13 +8967,13 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         r = ou(t),
         a = i.types.map((l) => l.id),
         rsS = RS1_SECTIONS.find((x) => x.id === sec),
-        o = rsS ? rsS.types.slice() : cr(t, a),
+        o = rsS ? (rsS.rot || rsS.types).slice() : cr(t, a), // v3.6.0：rot＝輪流出的題型（不含固定在最後一題的）
         c = rsS ? rs1Count() : pa();
       this.section = rsS ? sec : null;
       ((this.code = e),
         (this.unitId = t),
         (this.cfg = ss(e)),
-        (this.typeSeq = Array.from({ length: c }, (l, h) => o[h % o.length])),
+        (this.typeSeq = Array.from({ length: c }, (l, h) => (rsS && rsS.last && c >= 2 && h === c - 1 ? rsS.last : o[h % o.length]))), // v3.6.0：小節可以指定最後一題的題型
         (this.index = 0),
         (this.attempt = Lu({
           studentCode: e,
@@ -40207,7 +40280,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
   // （例如「周長＝弧長＋兩條半徑」就是「周長要怎麼算」那一步的答案）。紀錄用的是題型代號，不受影響。
   var RS_AL_NAMES = {
     T3: "寫出比值（兩種不同的量）", T4: "找相等的比", T5: "化成最簡單整數比", T6: "小數比、分數比化簡",
-    S2: "扇形的周長", S3: "扇形的面積", S4: "從圓面積求扇形面積", S5: "圓心角、弧長和面積的關係", S6: "由圓周長求扇形面積",
+    S2: "扇形的周長", S3: "扇形的面積", S4: "先找圓心角或半徑，再算面積", S5: "圓心角、弧長和面積的關係", S6: "由圓周長求扇形面積",
     S7: "牆角的扇形", S8: "長方形和半圓", S9: "正方形和 1/4 圓", S10: "1/4 圓和三角形",
     V1: "距離一樣，比快慢", V2: "時間一樣，比快慢", V3: "求速率", V4: "比較兩個速率", V5: "求距離", V6: "求時間",
     V7: "速率的單位換算", V8: "不同單位比快慢", V9: "平均速率", V10: "同向、反向、相遇",
