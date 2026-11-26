@@ -19,7 +19,7 @@
   var RS_MOVE = { walk: 5, run: 1.7, accel: 10, decel: 14, turn: 12, maxTurn: 14, dead: 0.12, minJoy: 0.35, stride: 1.3 };
   var ut = {
     name: "操場中的數學",
-    appVersion: "3.5.4",
+    appVersion: "3.6.0",
     teacherPassword: "8642",
     questionsPerSession: 9,
     questionsPerSessionOptions: [8, 9, 10],
@@ -731,7 +731,16 @@
         r.diagram && !(n.section && r.level === "basic" && r.typeId === "T9" && !(typeof RS_AL !== "undefined" && RS_AL.noOps)) && d.append(this.partsDiagram(r.diagram)),
         !r.figure && typeof RS_AL !== "undefined" && RS_AL.noOps && (i.pic === void 0 && (i.pic = rsAlPic(r)), i.pic && d.append(i.pic)),
         // v3.5.1：選擇題問「周長怎麼算」時，標出弧＋兩條半徑就等於給答案，第 2 層提示才標
-        r.figure && d.append(rsFigure(a && a.hl && !(a.hl === "per" && a.kind === "choice" && (i.hints[i.step] || 0) < 2) ? { ...r.figure, hl: a.hl, reveal: (i.hints[i.step] || 0) >= 2, h: i.hints[i.step] || 0, ch: a.kind === "choice" } : r.figure)),
+        r.figure &&
+          d.append(
+            rsFigure(
+              ((F0) =>
+                a && a.hl && !(a.hl === "per" && a.kind === "choice" && (i.hints[i.step] || 0) < 2) ? { ...F0, hl: a.hl, reveal: (i.hints[i.step] || 0) >= 2, h: i.hints[i.step] || 0, ch: a.kind === "choice", cap: a.figcap } : a && a.figcap ? { ...F0, cap: a.figcap } : F0)(
+                // v3.6.0：前面答對算出來的數（例如半徑）更新到圖上
+                r.steps.slice(0, i.solved ? r.steps.length : i.step).reduce((F, x) => (x.figSet ? { ...F, ...x.figSet } : F), r.figure),
+              ),
+            ),
+          ),
         // v2.4.0：第六單元每題都說明圓周率用 3.14
         /^S\d/.test(r.typeId || "") && d.append(T("p", { class: "rs-pi" }, "圓周率用 3.14")),
         r.equation && d.append(this.equationBox(r.equation)),
@@ -1063,8 +1072,10 @@
             // v2.3.0：答錯 → 說明錯在哪裡，這個任務失敗；要重新接一題類似題（第 3 次失敗才看完整解說）
             (e.feedback = {
               kind: "wrong",
-              html: `<div class="rs-fb-h"><i aria-hidden="true">✗</i>${r.guidedWrong ? "答案不對，再試一次（老師帶著做，不算失敗）" : `任務失敗：${e.q.steps.length > 1 ? `第 ${t.step + 1} 步` : "這一題"}答錯了`}</div><b>錯在哪裡：</b>${bt(r.feedback || "這個答案不對。")}${e.focus.length ? `<br>看題目裡標出來的：${e.focus.map((x) => `「${Si(x)}」`).join("")}` : ""}${
-                r.guidedWrong
+              html: `<div class="rs-fb-h"><i aria-hidden="true">✗</i>${r.recalc ? "這個數字不對，可以再算一次" : r.guidedWrong ? "答案不對，再試一次（老師帶著做，不算失敗）" : `任務失敗：${e.q.steps.length > 1 ? `第 ${t.step + 1} 步` : "這一題"}答錯了`}</div><b>錯在哪裡：</b>${bt(r.feedback || "這個答案不對。")}${e.focus.length ? `<br>看題目裡標出來的：${e.focus.map((x) => `「${Si(x)}」`).join("")}` : ""}${
+                r.recalc
+                  ? "<br>這一步只有這一次重算的機會。可以看提示，一步一步算，改好數字再按「確認答案」。"
+                  : r.guidedWrong
                   ? "<br>和老師一起想一想，需要的話可以按「提示」，再試一次。"
                   : r.giveUp
                   ? `<div class="rs-solution"><b>完整解說：</b>${e.q.steps.map((x, k) => `<div>${e.q.steps.length > 1 ? `第 ${k + 1} 步：` : ""}${bt(x.explanation || "")}</div>`).join("")}</div><br>這個任務已經試了 ${r.failCount} 次，先看懂上面的解說。${t.teacherLock ? "<b>請舉手找老師</b>，老師來了才能繼續。" : "等一下請老師陪你再看一次。"}`
@@ -6761,14 +6772,18 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       u = f.u || "公尺";
     if (f.kind === "sector") {
       let a = f.a,
-        whole = a > 180 || f.hl === "frac", // v3.4.0：問「幾分之幾」時，整個圓都畫出來
+        whole = a > 180 || f.hl === "frac" || f.hl === "circle", // v3.4.0：問「幾分之幾」時，整個圓都畫出來；v3.6.0：先算整個圓那一步也是
         R = whole ? 88 : a > 90 ? 100 : 150,
         cx = whole ? 160 : a > 90 ? 160 : 70,
         cy = whole ? 108 : a > 90 ? 175 : 185,
         a0 = a > 180 ? 90 : 0;
       // v3.5.1：整個圓放得進圖框時才畫虛線圓（放不進去會只剩一小段，像多畫的線）
       (a > 180 || f.hl === "frac") && path(rsArcPath(cx, cy, R, 0, 360), "none", { dash: !0, w: 1.5, stroke: "#9aa38c" });
-      path(rsArcPath(cx, cy, R, a0, a0 + a), f.hl === "area" ? C.fillHi || "#6fbf6a" : C.fill);
+      // v3.6.0：「先算整個圓」那一步，整個圓都塗色，扇形的兩條邊畫虛線（還不用乘分數）
+      f.hl === "circle"
+        ? (path(rsArcPath(cx, cy, R, 0, 360), C.fill),
+          [a0, a0 + a].forEach((dg) => out.push(`<line x1="${cx}" y1="${cy}" x2="${cx + R * Math.cos((dg * Math.PI) / 180)}" y2="${cy - R * Math.sin((dg * Math.PI) / 180)}" stroke="${C.line}" stroke-width="2" stroke-dasharray="6 5"/>`)))
+        : path(rsArcPath(cx, cy, R, a0, a0 + a), f.hl === "area" ? C.fillHi || "#6fbf6a" : C.fill);
       // v3.4.0：跟著步驟標出要看的地方
       let P = (deg) => [cx + R * Math.cos((deg * Math.PI) / 180), cy - R * Math.sin((deg * Math.PI) / 180)];
       // v3.5.0：切成幾塊的虛線會直接透露答案，打開第 2 層提示才畫
@@ -6810,8 +6825,8 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       let cx = 175,
         cy = 105,
         R = 82;
-      path(rsArcPath(cx, cy, R, 90, 360), C.fill);
-      out.push(`<rect x="${cx}" y="${cy - 70}" width="70" height="70" fill="#d8d2c4" stroke="#7a756a" stroke-width="2"/>`);
+      path(rsArcPath(cx, cy, R, f.hl === "circle" ? 0 : 90, 360), C.fill); // v3.6.0：先算整個圓那一步，整個圓都塗色
+      out.push(`<rect x="${cx}" y="${cy - 70}" width="70" height="70" fill="#d8d2c4" stroke="#7a756a" stroke-width="2"${f.hl === "circle" ? ' fill-opacity="0.55"' : ""}/>`);
       txt(cx + 35, cy - 35, "建物", { size: 14 });
       if (f.r2) {
         let r2 = 82 * (f.r2 / f.r);
@@ -6863,6 +6878,9 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
   // v3.4.0：圖下面的一句話（跟著步驟）
   function rsFigCap(f) {
     let g = (x, y) => (y ? g(y, x % y) : x);
+    // v3.6.0：這一步自己的說明（例如「扇形是整個圓的 1/4，要乘 1/4」）；先算整個圓那一步
+    if (f.cap) return f.cap;
+    if (f.hl === "circle") return "這一步先算整個圓的面積，還不用乘分數";
     // v3.5.0：「幾分之幾」「由哪些部分組成」的說明句等於給答案，打開第 2 層提示（f.reveal）才出現
     if ((f.hl === "frac" || f.hl === "parts") && !f.reveal) return "";
     // v3.5.2：選擇題的說明句（周長、由哪些部分組成）等於答案，第 3 層提示才出現
@@ -7950,7 +7968,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     if (prevExpr && ex) ((L1 = expr), (L2 = order || addTip || "照算式，從左邊開始算。"));
     else if (id === "S2" && k === 0) ((L1 = rs6hTwo("弧長＝直徑×3.14×幾分之幾。", `直徑是 ${r}×2＝${2 * r} 公尺，扇形是圓的 ${F}。`)), (L2 = rs6hTwo(expr, order)));
     else if (id === "S2") ((L1 = rs6hTwo("周長＝弧長＋半徑＋半徑。", `弧長是 ${N(2 * r * 3.14 * fr[0] / fr[1])}，半徑是 ${r}。`)), (L2 = rs6hTwo(expr, addTip)));
-    else if (/整個圓，面積/.test(p)) ((L1 = rs6hTwo("圓面積＝半徑×半徑×3.14。", `半徑是 ${r} 公尺。`)), (L2 = rs6hTwo(expr, order)));
+    else if (/整個圓，面積/.test(p)) ((L1 = `這一步先算整個圓，還不用乘分數。\n圓面積＝半徑×半徑×3.14。\n半徑是 ${r} 公尺。`), (L2 = rs6hTwo(expr, order)));
     else if (id === "S4" || id === "S5") {
       let b0 = tk ? N(tk[0].v) : "",
         FF = rs6hF(ff[0], ff[1]);
@@ -8063,6 +8081,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
   // 圖形要亮哪裡
   function rs6hHl(st, fig) {
     let p = st.prompt || "";
+    if (st.kind === "number" && /整個圓/.test(p)) return "circle"; // v3.6.0
     if (/幾分之幾/.test(p)) return "frac";
     if (!fig || fig.kind !== "sector") return /什麼形狀|哪些部分|哪兩部分|怎麼算/.test(p) ? "parts" : "num";
     if (/周長|繩子|外圍/.test(p)) return "per";
@@ -8083,6 +8102,13 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
             let h = st.kind === "number" ? rs6hNum2(st, T.id, s, q, k) : rs6hChoice2(st, T.id, s, q, k);
             h && h.length === 3 && h.every(Boolean) && (st.hints = h);
             st.hl = rs6hHl(st, q.figure);
+            // v3.6.0：答對算出半徑後，圖上的「? 公尺」換成算出來的數（老師 11/26）
+            st.kind === "number" && /半徑是多少/.test(st.prompt || "") && (st.figSet = { r: RS6H_N(st.answer) });
+            // v3.6.0：上一步先算整個圓，這一步圖下面寫要乘幾分之幾
+            if (k > 0 && /整個圓/.test(q.steps[k - 1].prompt || "") && st.kind === "number") {
+              let fr = s.a ? rs6hFrac(s.a) : T.id === "S7" ? [3, 4] : null;
+              fr && (st.figcap = `${T.id === "S7" ? "澆得到的是" : "扇形是"}整個圓的 ${fr[0]}/${fr[1]}，要乘 ${fr[0]}/${fr[1]}`);
+            }
             st.card314 = st.kind === "number" && st.hints.some((x) => /×\s*3\.14|3\.14\s*×/.test(String(x))); // v3.5.1：只有要乘 3.14 的步驟才有小卡
             if (st.kind === "choice") {
               let bad = (st.choices || []).filter((c) => !c.correct && c.feedback).slice(0, 2);
@@ -8114,7 +8140,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
   // ===================== v3.5.4：提示要等一下才能按（老師 11/26：避免每題都把三層提示按完） =====================
   // 題目（每一步）出現後 first 秒才能按提示 1；每打開一層，下一層再等 gap 秒。教師設定可關、可調秒數（存在這台平板）。
   // 作答紀錄不變（一樣記用到第幾層提示）。
-  var RS_HINTW = { on: !0, first: 20, gap: 15 };
+  var RS_HINTW = { on: !0, first: 8, gap: 5 }; // v3.6.0：老師 11/26 試用後覺得太長（原本 20、15 秒）
   function rsHintCfg() {
     let w = (Ti() || {}).hintWait || {};
     // 自動測試的瀏覽器（navigator.webdriver）沒設定時不等，舊測試才不會卡住；iPad、一般瀏覽器預設要等
@@ -8144,6 +8170,37 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
     else (b.classList.remove("rs-hint-wait"), b.setAttribute("aria-disabled", "false"), lab && (lab.textContent = `提示（${cur.hints[cur.step] || 0}/3）`));
   }, 1e3);
   window.__rsHintW = { cfg: rsHintCfg, left: rsHintLeft }; // 測試用
+  // ===================== v3.6.0：鎖住等老師時，遠遠就看得到（老師 11/26：C 被鎖住時不會主動告訴老師） =====================
+  // 答題時第 3 次失敗鎖住、或登入時「需要老師協助」：畫面外框閃黃色、下方大字「舉手請老師過來」；
+  // 音效開著時每 30 秒輕響一聲。裝置設定「減少動態效果」時外框不閃（固定粗框）。紀錄不變。
+  var RS_LOCKA = { el: null, last: 0, css: !1 };
+  function rsLockAlertCss() {
+    if (RS_LOCKA.css) return;
+    RS_LOCKA.css = !0;
+    document.head.append(
+      T("style", {}, [
+        ".rs-lock-alert{position:fixed;inset:0;pointer-events:none;z-index:9999;border:12px solid #f2c14e;box-shadow:inset 0 0 0 4px #b07800;animation:rsLockBlink 1.2s ease-in-out infinite}",
+        "@keyframes rsLockBlink{50%{border-color:#fff0b8;box-shadow:inset 0 0 0 4px #f2c14e}}",
+        "@media (prefers-reduced-motion: reduce){.rs-lock-alert{animation:none}}",
+        ".rs-lock-msg{position:absolute;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);white-space:nowrap;background:#fff3c4;border:3px solid #b07800;color:#5a3d00;font-weight:700;font-size:32px;line-height:1.3;padding:10px 28px;border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.25)}",
+      ].join("")),
+    );
+  }
+  function rsLockShown() {
+    return !!document.getElementById("btn-teacher-unlock") || [...document.querySelectorAll("h2")].some((h) => h.textContent.trim() === "需要老師協助" && h.offsetParent);
+  }
+  setInterval(() => {
+    let A = RS_LOCKA,
+      on = rsLockShown();
+    if (on && !A.el) (rsLockAlertCss(), (A.el = T("div", { class: "rs-lock-alert", id: "rs-lock-alert", role: "status" }, T("div", { class: "rs-lock-msg" }, "✋ 舉手請老師過來"))), document.body.append(A.el), (A.last = 0));
+    else if (!on && A.el) (A.el.remove(), (A.el = null));
+    if (on && Date.now() - A.last >= 3e4) {
+      A.last = Date.now();
+      try {
+        (ls(880, 0, 0.35, 0.09, "sine"), ls(1175, 0.28, 0.5, 0.09, "sine"));
+      } catch {}
+    }
+  }, 1e3);
   function rsNeedPassword() {
     return Ti().requirePassword === !0;
   }
@@ -8902,9 +8959,18 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
       let r = { correct: i.correct, feedback: i.feedback, stepIndex: t.step };
       // v3.5.1：第六單元數字題答錯、又不是常見的錯誤算法 → 多半是計算錯，說明改成指出算式（原本會重講觀念）
       if (!i.correct && i.isDefault && n.kind === "number" && /^S/.test(t.q.typeId || "")) {
-        let m = (n.hints || []).map((h) => /算式：([^。]+)/.exec(h)).find(Boolean),
+        let m = (n.hints || []).map((h) => /算式(?:：|是 )([^。\n]+)/.exec(h)).find(Boolean),
           dec = /\./.test(String(n.answer)) || (m && /\d\.\d/.test(m[1]));
         ((r.feedback = m ? `可能是算錯了。這一步要算 ${m[1]}，再算一次${dec ? "（小數點要對齊）" : ""}。` : `可能是算錯了，再仔細算一次${dec ? "（小數點要對齊）" : ""}。`), (r.calc = !0));
+      }
+      // v3.6.0：數字題答錯、又不是常見迷思（錯誤類型記「其他」，多半是算錯）→ 每一步可以再算一次，不算任務失敗
+      // （老師 11/26：B 常因計算錯誤要重新接任務）。首次正誤照樣是錯、錯誤類型照記；再算答對就繼續。
+      if (!i.correct && i.isDefault && n.kind === "number" && !t.guided && !(t.recalc || {})[t.step]) {
+        (t.recalc = t.recalc || {})[t.step] = !0;
+        t.wrong[t.step]++;
+        t.rec.errType || (t.rec.errType = rs1ErrType(i.feedback, i.isDefault, t.q.typeId));
+        r.calc || (r.feedback = "可能是算錯了，再仔細算一次。");
+        return ((r.recalc = !0), r);
       }
       if (i.correct)
         ((r.stepDone = !0),
