@@ -19,7 +19,7 @@
   var RS_MOVE = { walk: 5, run: 1.7, accel: 10, decel: 14, turn: 12, maxTurn: 14, dead: 0.12, minJoy: 0.35, stride: 1.3 };
   var ut = {
     name: "操場中的數學",
-    appVersion: "3.7.0",
+    appVersion: "3.8.0",
     teacherPassword: "8642",
     questionsPerSession: 9,
     questionsPerSessionOptions: [8, 9, 10],
@@ -5485,7 +5485,7 @@
               class: "unit-btn" + (t.open ? "" : " rs-closed") + (secDone[s.id] ? " rs-isdone" : ""),
               id: `sec-${s.id}`,
               "aria-disabled": String(!t.open),
-              onclick: () => t.open && fin(s.id),
+              onclick: () => t.open && (secDone[s.id] ? rs1DoneChoice(s, code).then((v) => v && fin(v)) : fin(s.id)),
             },
             T("span", { class: "no" }, s.id),
             T(
@@ -5604,7 +5604,7 @@
       if (!look) return null;
       let sec = await rs1PickSection(RS_GUEST_CODE, unit);
       if (sec === "back") continue;
-      return sec ? { code: RS_GUEST_CODE, section: sec } : null;
+      return sec ? { code: RS_GUEST_CODE, ...rs1SecFree(sec) } : null;
     }
   }
   // 2.7.0：學生入口先選人物、輸入該人物的密碼；取消密碼就回到選人物，選人物按「回首頁」就回到選入口
@@ -5627,7 +5627,60 @@
     let code = RS_ENTRY.code;
     if (!code) return null;
     let sec = await rs1PickSection(code, unit);
-    return sec && sec !== "back" ? { code, section: sec } : null;
+    return sec && sec !== "back" ? { code, ...rs1SecFree(sec) } : null;
+  }
+  // v3.8.0：選小節回傳「free:6-2」表示要自由探索
+  function rs1SecFree(v) {
+    let m = /^free:(.+)$/.exec(String(v));
+    return m ? { section: m[1], sec: m[1], free: !0 } : { section: v, sec: v, free: !1 };
+  }
+  // v3.8.0：點已完成的小節：先選「再做一次／自由探索」，再確認一次
+  function rs1Ask(title, lines, btns) {
+    return new Promise((done) => {
+      let m,
+        body = T(
+          "div",
+          { class: "rs-again" },
+          T("h2", {}, title),
+          ...lines.filter(Boolean).map((x) => T("p", {}, x)),
+          T(
+            "div",
+            { class: "rs-again-btns" },
+            ...btns.map(([txt, v, id, cls]) => T("button", { type: "button", class: "btn " + (cls || ""), id, onclick: () => (m.close(), done(v)) }, txt)),
+          ),
+        );
+      m = Qn(body, { label: title });
+    });
+  }
+  async function rs1DoneChoice(s, code) {
+    let n = rs1Count(),
+      name = `${s.id} ${s.name}`;
+    for (;;) {
+      let what = rsFpOn()
+        ? await rs1Ask(`${name} 已經完成了`, ["要再做一次，還是去自由探索？"], [
+            [`🔁 再做一次（${n} 個任務）`, "again", "sec-again", "rs-again-big"],
+            ["🏃 自由探索（找貼紙、賽跑、換造型）", "free", "sec-free", "rs-again-big"],
+            ["返回", null, "sec-cancel", "quiet"],
+          ])
+        : "again";
+      if (!what) return null;
+      let left = rsFpRoundLeft(code),
+        ok =
+          what === "again"
+            ? await rs1Ask("確定要再做一次嗎？", [`${name}：會重新接 ${n} 個任務。`], [
+                ["確定，再做一次", !0, "sec-again-ok", "primary"],
+                ["返回", !1, "sec-again-no", "quiet"],
+              ])
+            : await rs1Ask("確定要自由探索嗎？", [
+                "自由探索不會做題目；按「回首頁」就結束。",
+                left ? `這一輪還有 ${left} 張貼紙沒找到。` : "這一輪的貼紙都找到了。再完成一節，才會藏新的貼紙；投籃、賽跑、換造型還是可以玩。",
+              ], [
+                ["確定，去自由探索", !0, "sec-free-ok", "primary"],
+                ["返回", !1, "sec-free-no", "quiet"],
+              ]);
+      if (ok) return what === "free" ? `free:${s.id}` : s.id;
+      if (!rsFpOn()) return null;
+    }
   }
 
   // ---------- 操作元件（基礎題，2D，放在作答面板） ----------
@@ -6034,6 +6087,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
 @keyframes rsPulse{0%{transform:scale(1)}35%{transform:scale(1.08,1.9)}100%{transform:scale(1)}}
 @media (prefers-reduced-motion:reduce){.rs-flystar{display:none}.rs-pulse{animation:none}.btn:active,.choice:active,.numpad button:active,.pad button:active,.hud button:active,.nav button:active{transform:none}}
 .rs-students .avatar-card{position:relative}.rs-code{position:absolute;top:6px;left:8px;background:#2f5419;color:#fff;border-radius:999px;min-width:28px;height:28px;display:grid;place-items:center;font-weight:800}
+.rs-again h2{margin:0 0 6px}.rs-again p{margin:4px 0;font-size:18px;line-height:1.5}.rs-again-btns{display:flex;flex-direction:column;gap:10px;margin-top:14px}.rs-again-btns .btn{min-height:56px;font-size:20px}.rs-again-btns .rs-again-big{min-height:72px;font-size:22px;font-weight:800}
 .rs-sections{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:10px}@media (max-width:620px){.rs-sections{grid-template-columns:1fr!important}}.rs-sections .unit-btn{width:100%}.rs-sections .unit-btn.rs-closed{opacity:.5;cursor:not-allowed}.rs-sections .no{font-size:.95em}.rs-sections .rs-done{color:#9a6a00;font-weight:700}.rs-starline{font-weight:700;color:#9a6a00;margin:0 0 8px;font-size:18px}.rs-sections .unit-btn.rs-isdone{border-color:#f5b82e;background:#fffaf0}
 .rs-op{border:2px dashed #b9cfa6;border-radius:14px;padding:10px 12px;margin:10px 0;background:#fbfdf8}
 .rs-op-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}.rs-op-tag{font-size:.8em;color:#5b6b4c;background:#eef4e6;border-radius:999px;padding:2px 8px}
@@ -9854,10 +9908,11 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
           return;
         }
         let av = rs1Kit(pick.code);
-        (Cu(pick.code, av), this.startSession(e, pick.code, av, pick.section));
+        (Cu(pick.code, av), this.startSession(e, pick.code, av, pick.section, pick.free));
       }
-      startSession(e, t, n, sec) {
+      startSession(e, t, n, sec, free) {
         rsFpEnd(this);
+        if (free) return this.startFree(e, t, n, sec);
         ((RS1_CUR = sec ? { code: t, section: sec, task: rs1Task(t, sec) } : null), rs1ApplyBody(), rsShowNpcs(this.world, sec ? [] : null), rsBoardRefresh(this.world, t));
         (this.removeOverlay(".home"),
           (this.unit = e),
@@ -9874,6 +9929,20 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
           this.showCoach(),
           this.activateTask());
         rsFpTryCheck(this); // v3.3.0：訪客名字填「試玩」→ 不用答題，直接進自由活動（給老師試玩用）
+      }
+      // v3.8.0：已完成的小節選「自由探索」：不接任務、不寫練習紀錄，直接進自由活動（接續這一輪）
+      startFree(e, t, n, sec) {
+        ((RS1_CUR = { code: t, section: sec, task: rs1Task(t, sec) }), rs1ApplyBody(), rsShowNpcs(this.world, []), rsBoardRefresh(this.world, t));
+        (this.removeOverlay(".home"),
+          (this.unit = e),
+          (this.session = rsFpSession(t, e.id, n, sec)),
+          this.world.setAvatar(n, rsFpCos(t)),
+          this.world.setViewLocked(!Ei()),
+          this.world.resetPlayer(),
+          this.world.collect.show(Pc(t, e.id)),
+          (this.coachShown = !0));
+        rsFpStart(this, { again: !0 });
+        this.free || (this.toast("老師已經關掉自由活動。", 3600), this.goHome(!0));
       }
       renderNav() {
         this.removeOverlay(".camctl, .camctl-part");
@@ -10385,6 +10454,7 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
           requestAnimationFrame(() => this.world.resize()));
         if (e.section) {
           let st = rs1MarkDone(e.code, e.section);
+          rsFpRoundGrant(e); // v3.8.0：完成一節（貼上星星）就給一輪自由活動
           ((this.rsStar = st), rsBoardRefresh(this.world, e.code, e.section), rsLookBoard(this.world, e.section), Ri.complete(), (this.mode = "summary"));
           setTimeout(() => this.showSummary(null), this.world.reduced ? 300 : 2600);
           return;
@@ -10538,8 +10608,9 @@ body.rs-noread .say,body.rs-noread #btn-read,body.rs-noread .intro-cap .say{disp
         let sec = await rs1PickSection(code, unit.id);
         if (sec === "back") return this.onUnit(unit);
         if (!sec) return;
-        let av = rs1Kit(code);
-        (Cu(code, av), this.startSession(unit, code, av, sec));
+        let av = rs1Kit(code),
+          fr = rs1SecFree(sec);
+        (Cu(code, av), this.startSession(unit, code, av, fr.sec, fr.free));
       }
     };
   /* ===== v3.1.0：首頁 QR code（掃描就能在別台裝置開啟練習器），點一下放大 =====
@@ -39035,7 +39106,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       ["balloon", "氣球"],
       ["fx", "腳下特效"],
     ],
-    RS_FP_QUIZ_CAP = 3, // 每一種挑戰，每次自由活動前 3 次的數學題有代幣（之後仍可以挑戰自己的紀錄）
+    RS_FP_QUIZ_CAP = 3, // 每一種挑戰，每一輪（完成一節給一輪，v3.8.0）前 3 次的數學題有代幣（之後仍可以挑戰自己的紀錄）
     RS_FP_RIVALS = ["小風", "小雷", "小雲"], // 電腦同學（不是班上的人）
     FpSphere = dt; // SphereGeometry（下面的函式裡 dt 常拿來當「這一格過了幾秒」，先另外取名）
   function rsFpOn() {
@@ -39056,6 +39127,35 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       at: Number(f.at) || 0,
     };
   }
+  // ---------- v3.8.0：一輪自由活動（每完成一節給一輪；存在這台平板的人物資料裡，訪客只在記憶體） ----------
+  // { sec, seed, at, px, pz, owned（藏的時候已經有的貼紙）, n（藏了幾張）, got／note／open（找到的貼紙、撿到的紙條、打開過的草叢回收桶）, cap（挑戰題代幣用了幾次） }
+  function rsFpRoundGet(code) {
+    let r = code && zn(code).fpr;
+    return r && typeof r == "object" && r.seed ? r : null;
+  }
+  function rsFpRoundPut(code, r) {
+    let p = zn(code);
+    (r ? (p.fpr = r) : delete p.fpr, hr(code, p));
+  }
+  function rsFpRoundGrant(S) {
+    if (!S || !S.section || !S.code) return;
+    rsFpRoundPut(S.code, { sec: S.section, seed: Math.floor(Math.random() * 4294967295) + 1, at: Date.now(), px: null, pz: null, owned: [], n: 0, got: [], note: [], open: [], cap: { hoop: 0, r100: 0, r400: 0 } });
+  }
+  // 這一輪還有幾張沒找到（還沒藏的新一輪算 RS_FP_COUNT 張）
+  function rsFpRoundLeft(code) {
+    let r = rsFpRoundGet(code);
+    return !r ? 0 : r.px == null ? RS_FP_COUNT : Math.max(0, (r.n || 0) - (r.got || []).length);
+  }
+  function rsFpRoundSave(a) {
+    let F = a && a.free,
+      r = F && F.round;
+    if (!r) return;
+    let idx = (arr, ok) => arr.map((x, i) => (ok(x) ? i : -1)).filter((i) => i >= 0);
+    ((r.got = idx(F.spots, (x) => x.got)), (r.note = idx(F.spots, (x) => x.note)), (r.open = idx(F.props, (x) => x.done)));
+    r.cap = { hoop: F.capBase.hoop + F.hoopN, r100: F.capBase.r100 + F.r100N, r400: F.capBase.r400 + F.r400N };
+    rsFpRoundPut(F.code, r);
+  }
+  var rsFpFoundTxt = (F) => (F.spots.length ? `${F.spots.filter((x) => x.got).length}／${F.spots.length}` : "—");
   function rsFpSave(code, f, quiet) {
     f.at = Date.now();
     let p = zn(code);
@@ -39201,13 +39301,18 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
   }
 
   // ---------- 開始、結束 ----------
-  function rsFpStart(a) {
+  function rsFpStart(a, opt = {}) {
     let S = a.session;
     if (!rsFpOn() || !S || !S.done || !S.section || a.free) return;
     rsFpCss();
     let w = a.world,
-      now = new Date();
+      now = new Date(),
+      round = rsFpRoundGet(S.code),
+      CAP = RS_FP_QUIZ_CAP;
     a.free = {
+      round, // v3.8.0：這一輪（沒有就是 null：不藏貼紙、挑戰題沒有代幣）
+      capBase: round ? { hoop: 0, r100: 0, r400: 0, ...round.cap } : { hoop: CAP, r100: CAP, r400: CAP },
+      again: !!opt.again, // 從選小節再進來的
       code: S.code,
       sec: S.section,
       id: `${S.code}-自由-${Vn(now.toISOString()).replace(/[-: ]/g, "")}-${Math.floor(Math.random() * 900 + 100)}`,
@@ -39235,8 +39340,22 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     };
     (va(), a.hideBubble(), a.panel.close(), a.removeOverlay(".trays, .replay, .coach"), w.clearStation());
     (a.setMode("explore"), w.setMode("explore"), w.resetView(!0), a.renderHud(), a.renderNav(), requestAnimationFrame(() => w.resize()));
+    let fresh = !!round && round.px == null;
     (rsFpApplyAb(a), rsFpSpawn(a), rsFpMarker(a), rsFpLog(a));
-    a.toast(`自由活動開始！操場上藏了 ${RS_FP_COUNT} 張貼紙，有些要動手才找得到。找不到可以按「提示」。`, 5200);
+    let left = a.free.spots.filter((x) => !x.got).length;
+    a.toast(
+      fresh
+        ? `自由活動開始！操場上藏了 ${a.free.spots.length} 張貼紙，有些要動手才找得到。找不到可以按「提示」。`
+        : left
+          ? `接著找這一輪的貼紙：還有 ${left} 張沒找到。找不到可以按「提示」。`
+          : "這一輪的貼紙都找到了。再完成一節，就會藏新的貼紙；投籃、賽跑、換造型還是可以玩。",
+      5200,
+    );
+  }
+  // v3.8.0：從選小節點已完成的小節 →「自由探索」進來時用的工作階段：已經完成、沒有題目，不寫練習紀錄
+  function rsFpSession(code, unitId, avatar, sec) {
+    let S = Object.create(xa.prototype);
+    return Object.assign(S, { section: sec, code, unitId, cfg: ss(code), typeSeq: [], index: 0, attempt: { avatar, status: "free", attemptId: null }, cur: null, done: !0, freeOnly: !0 });
   }
   // 老師試玩：用「訪客」進入、名字填「試玩」，選好小節後直接進自由活動，並先給 60 枚代幣。
   // 訪客本來就不寫試算表、不存到平板，所以不會留下任何紀錄。
@@ -39245,7 +39364,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     if (!rsFpOn() || !rsIsGuest() || String(RS_ENTRY.name || "").trim() !== "試玩" || !S || !S.section) return;
     setTimeout(() => {
       if (a.session !== S || a.free) return;
-      ((S.index = S.total), (S.done = !0), rsFpStart(a));
+      ((S.index = S.total), (S.done = !0), rsFpRoundGrant(S), rsFpStart(a));
       if (!a.free) return;
       let f = rsFpGet(S.code);
       f.coins < 60 && ((f.coins = 60), rsFpSave(S.code, f, !0), rsFpHudCoins(a));
@@ -39259,7 +39378,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
   function rsFpEnd(a) {
     let F = a && a.free;
     if (!F) return;
-    (rsFpTick(a), rsFpLog(a));
+    (rsFpTick(a), rsFpLog(a), rsFpRoundSave(a));
     let w = a.world;
     for (let s of F.spots) s.g && w.scene.remove(s.g);
     for (let p of F.props) p.g && w.scene.remove(p.g);
@@ -39317,7 +39436,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
         { class: "fp-pill", id: "fp-pill" },
         T("span", { class: "tag" }, "自由活動"),
         T("span", { id: "fp-coins", class: "n", "aria-label": `代幣 ${f.coins} 枚` }, `🪙 ${f.coins}`),
-        T("span", { id: "fp-found", class: "n" }, T("span", { class: "w" }, "貼紙 "), T("span", { "aria-hidden": "true" }, "📒"), ` ${F.found}／${F.spots.length || RS_FP_COUNT}`),
+        T("span", { id: "fp-found", class: "n" }, T("span", { class: "w" }, "貼紙 "), T("span", { "aria-hidden": "true" }, "📒"), ` ${rsFpFoundTxt(F)}`),
         T("span", { id: "fp-sense", class: "sense", role: "status" }, "📡", T("span", { class: "w" }, " 附近有貼紙")),
       ),
       T("span", { class: "spacer" }),
@@ -39336,7 +39455,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       n = a.overlay.querySelector("#fp-found"),
       p = a.overlay.querySelector("#fp-pill"),
       v = rsFpGet(F.code).coins;
-    (c && ((c.textContent = `🪙 ${v}`), c.setAttribute("aria-label", `代幣 ${v} 枚`)), n && (n.lastChild.textContent = ` ${F.found}／${F.spots.length || RS_FP_COUNT}`));
+    (c && ((c.textContent = `🪙 ${v}`), c.setAttribute("aria-label", `代幣 ${v} 枚`)), n && (n.lastChild.textContent = ` ${rsFpFoundTxt(F)}`));
     pop && p && (p.classList.remove("pop"), void p.offsetWidth, p.classList.add("pop"));
   }
 
@@ -39364,7 +39483,18 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     (g.position.set(x, y, z), w.scene.add(g));
     return g;
   }
-  var rsFpShuffle = (arr) => arr.map((v) => ({ v, r: Math.random() })).sort((x, y) => x.r - y.r).map((x) => x.v);
+  var rsFpShuffle = (arr, R = Math.random) => arr.map((v) => ({ v, r: R() })).sort((x, y) => x.r - y.r).map((x) => x.v);
+  // v3.8.0：同一個種子會產生同一串亂數（接續上一輪時，貼紙放回同樣的地方）
+  function rsFpRng(seed) {
+    let a = seed >>> 0 || 1;
+    return () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
   function rsFpBushMesh() {
     let g = new Re(),
       cols = [5216842, 4558392, 6205011];
@@ -39397,9 +39527,20 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
   function rsFpSpawn(a) {
     let F = a.free,
       w = a.world,
-      f = rsFpGet(F.code),
-      far = (x, z, d) => Math.hypot(x - w.pos.x, z - w.pos.z) >= d,
-      pool = rsFpShuffle(RS_FP_SPOTS),
+      r = F.round;
+    F.spots = [];
+    F.props = [];
+    if (!r) return rsFpHudCoins(a); // 沒有這一輪：不藏貼紙
+    // v3.8.0：第一次藏的時候記下人物位置和已經有的貼紙；之後用同一個種子重新擺，位置和貼紙都一樣
+    if (r.px == null) {
+      let have = rsFpGet(F.code).stickers;
+      ((r.px = w.pos.x), (r.pz = w.pos.z), (r.owned = Object.keys(have).filter((k) => have[k])));
+    }
+    let R = rsFpRng(r.seed),
+      P0 = { x: r.px, z: r.pz },
+      f = { stickers: Object.fromEntries((r.owned || []).map((k) => [k, 1])) },
+      far = (x, z, d) => Math.hypot(x - P0.x, z - P0.z) >= d,
+      pool = rsFpShuffle(RS_FP_SPOTS, R),
       open = [];
     // 走到就有的
     for (let s of pool) {
@@ -39415,43 +39556,50 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       // 還沒有的貼紙優先；都有了就隨機
       order = (gold) => {
         let all = RS_FP_STICKERS.filter((x) => !!x[3] === gold).map((x) => x[0]),
-          missing = rsFpShuffle(all.filter((id) => !f.stickers[id]));
-        return missing.concat(rsFpShuffle(all.filter((id) => !missing.includes(id))));
+          missing = rsFpShuffle(
+            all.filter((id) => !f.stickers[id]),
+            R,
+          );
+        return missing.concat(
+          rsFpShuffle(
+            all.filter((id) => !missing.includes(id)),
+            R,
+          ),
+        );
       },
       ids = order(!1),
       gids = order(!0),
-      nextId = (hidden) => (hidden && Math.random() < 0.5 ? gids.shift() || ids.shift() : ids.shift() || gids.shift()),
+      nextId = (hidden) => (hidden && R() < 0.5 ? gids.shift() || ids.shift() : ids.shift() || gids.shift()),
       spots = [],
       add = (o) => {
         let id = nextId(o.type !== "open");
-        return (spots.push(Object.assign({ id, gold: !!rsFpDef(id)[3], got: !1, g: null, ph: Math.random() * 6 }, o)), spots[spots.length - 1]);
+        return (spots.push(Object.assign({ id, gold: !!rsFpDef(id)[3], got: !1, g: null, ph: R() * 6 }, o)), spots[spots.length - 1]);
       };
     for (let p of open) {
       let s = add({ type: "open", x: p.x, z: p.z, where: p.where });
       ((s.g = rsFpDisc(w, rsFpStickerTex(s.id), p.x, rsGroundY(p.x, p.z) + 1.15, p.z, s.gold)), (s.y0 = s.g.position.y));
     }
     // 要動手找的：五種裡挑四種（測試可以用 window.__rsFpTypes 指定）
-    let types = (Array.isArray(window.__rsFpTypes) ? window.__rsFpTypes.slice() : rsFpShuffle(["ride", "stage", "bush", "bin", "clue"])).slice(0, RS_FP_COUNT - open.length),
+    let types = (Array.isArray(window.__rsFpTypes) ? window.__rsFpTypes.slice() : rsFpShuffle(["ride", "stage", "bush", "bin", "clue"], R)).slice(0, RS_FP_COUNT - open.length),
       A = gt.stage,
-      R = gt.recycle;
-    F.props = [];
+      RC = gt.recycle;
     for (let ty of types) {
       if (ty === "ride") {
         let kinds = Object.keys(RS_FP_RIDES),
-          k = window.__rsFpRide || kinds[Math.floor(Math.random() * kinds.length)],
-          tg = plList().filter((t) => t.kind === k).sort((p, q) => Math.hypot(p.app.x - w.pos.x, p.app.z - w.pos.z) - Math.hypot(q.app.x - w.pos.x, q.app.z - w.pos.z))[0];
+          k = window.__rsFpRide || kinds[Math.floor(R() * kinds.length)],
+          tg = plList().filter((t) => t.kind === k).sort((p, q) => Math.hypot(p.app.x - P0.x, p.app.z - P0.z) - Math.hypot(q.app.x - P0.x, q.app.z - P0.z))[0];
         add({ type: "ride", ride: k, x: tg ? tg.app.x : 0, z: tg ? tg.app.z : 30, where: k === "hoop" ? "籃球場" : "遊樂設施" });
       } else if (ty === "stage") {
-        let x = A.x + (Math.random() * 2 - 1) * (A.w / 2 - 2),
+        let x = A.x + (R() * 2 - 1) * (A.w / 2 - 2),
           z = A.z + A.d / 2 - 1.3,
           s = add({ type: "stage", x, z, where: "司令臺" });
         ((s.g = rsFpDisc(w, rsFpStickerTex(s.id), x, A.h + 1.15, z, s.gold)), (s.y0 = s.g.position.y), (s.g.children[2].position.y = -1.12));
       } else if (ty === "bush") {
-        let c = rsFpShuffle(RS_FP_BUSH_AT).find((b) => {
+        let c = rsFpShuffle(RS_FP_BUSH_AT, R).find((b) => {
             let p = w.nav.nearestFree(b[0], b[1]);
             return Math.hypot(p.x - b[0], p.z - b[1]) < 1.5 && far(b[0], b[1], 12);
           }) || RS_FP_BUSH_AT[0],
-          has = Math.floor(Math.random() * 3),
+          has = Math.floor(R() * 3),
           s = add({ type: "bush", x: c[0], z: c[1], where: c[2] });
         [
           [-2.6, 0.5],
@@ -39461,27 +39609,27 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
           let g = rsFpBushMesh(),
             x = c[0] + ox,
             z = c[1] + oz;
-          (g.position.set(x, rsGroundY(x, z), z), (g.rotation.y = Math.random() * 6), w.scene.add(g));
-          F.props.push({ kind: "bush", x, z, g, spot: s, has: i === has, done: !1, ph: Math.random() * 6 });
+          (g.position.set(x, rsGroundY(x, z), z), (g.rotation.y = R() * 6), w.scene.add(g));
+          F.props.push({ kind: "bush", x, z, g, spot: s, has: i === has, done: !1, ph: R() * 6 });
           i === has && ((s.x = x), (s.z = z));
         });
       } else if (ty === "bin") {
-        let has = Math.floor(Math.random() * 3),
-          z = R.z + R.d / 2 + 1.25,
-          s = add({ type: "bin", x: R.x, z, where: "資源回收室" });
+        let has = Math.floor(R() * 3),
+          z = RC.z + RC.d / 2 + 1.25,
+          s = add({ type: "bin", x: RC.x, z, where: "資源回收室" });
         [2470864, 4168277, 14856994].forEach((col, i) => {
           let g = rsFpBinMesh(col),
-            x = R.x - 1.6 + i * 1.6;
+            x = RC.x - 1.6 + i * 1.6;
           (g.position.set(x, 0, z), w.scene.add(g));
           F.props.push({ kind: "bin", x, z, g, spot: s, has: i === has, done: !1 });
           i === has && (s.x = x);
         });
       } else if (ty === "clue" && notePos) {
         // 數學紙條：照著算出來的距離，從起跑線沿跑道走過去
-        let speed = Math.random() < 0.5,
-          v = [2, 3, 4][Math.floor(Math.random() * 3)],
-          t = speed ? [5, 6, 8, 10].filter((x) => x * v <= 40)[Math.floor(Math.random() * [5, 6, 8, 10].filter((x) => x * v <= 40).length)] : 0,
-          n = speed ? v * t : [12, 18, 24, 30, 36][Math.floor(Math.random() * 5)],
+        let speed = R() < 0.5,
+          v = [2, 3, 4][Math.floor(R() * 3)],
+          t = speed ? [5, 6, 8, 10].filter((x) => x * v <= 40)[Math.floor(R() * [5, 6, 8, 10].filter((x) => x * v <= 40).length)] : 0,
+          n = speed ? v * t : [12, 18, 24, 30, 36][Math.floor(R() * 5)],
           s = add({
             type: "clue",
             x: notePos.x,
@@ -39495,6 +39643,13 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       }
     }
     F.spots = spots;
+    // v3.8.0：接續上一輪：找到的、撿過的紙條、打開過的草叢和回收桶照原樣
+    let gone = (s) => s.g && (w.scene.remove(s.g), (s.g = null));
+    for (let i of r.note || []) spots[i] && ((spots[i].note = !0), gone(spots[i]));
+    for (let i of r.got || []) spots[i] && ((spots[i].got = !0), gone(spots[i]));
+    for (let i of r.open || []) F.props[i] && ((F.props[i].done = !0), (F.props[i].at = 1));
+    for (let p of F.props) p.spot.got && ((p.done = !0), (p.at = 1));
+    ((r.n = spots.length), rsFpRoundPut(F.code, r));
     rsFpHudCoins(a);
   }
   function rsFpCollect(a, s, inPlay) {
@@ -39508,7 +39663,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     try {
       Ri.star();
     } catch {}
-    (rsFpHudCoins(a, !0), rsFpLog(a));
+    (rsFpHudCoins(a, !0), rsFpLog(a), rsFpRoundSave(a));
     let left = F.spots.filter((x) => !x.got).length,
       msg = `找到${s.gold ? "金色" : ""}貼紙：${def[1]} ${def[2]}${isNew ? "（新的！）" : ""}　＋${coin} 代幣${left ? `　還有 ${left} 張` : `　${F.spots.length} 張都找到了！`}`;
     if (inPlay) (a.playTip(msg), s.g && (a.world.scene.remove(s.g), (s.g = null)));
@@ -39525,14 +39680,14 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
   function rsFpHint(a) {
     let F = a.free,
       left = F.spots.filter((s) => !s.got);
-    if (!left.length) return a.toast("這次的貼紙都找到了。可以去投籃、賽跑，或換造型。", 3600);
+    if (!left.length) return a.toast(F.spots.length ? "這一輪的貼紙都找到了。再完成一節，就會藏新的貼紙。可以去投籃、賽跑，或換造型。" : "現在沒有藏貼紙。再完成一節，就會藏新的貼紙。可以去投籃、賽跑，或換造型。", 4200);
     a.toast(rsFpHintText(a, left[F.hintI++ % left.length]), 5200);
   }
   // 翻草叢、開回收桶
   function rsFpProp(a, p) {
     let F = a.free;
     if (!F || p.done) return;
-    ((p.done = !0), (p.at = performance.now()));
+    ((p.done = !0), (p.at = performance.now()), rsFpRoundSave(a));
     try {
       Ri.soft();
     } catch {}
@@ -39651,7 +39806,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       else if (s.type === "clue") {
         if (!s.note) {
           if (!busy && near(s.x, s.z, 1.5)) {
-            ((s.note = !0), s.g && (w.scene.remove(s.g), (s.g = null)));
+            ((s.note = !0), s.g && (w.scene.remove(s.g), (s.g = null)), rsFpRoundSave(a));
             try {
               Ri.accept();
             } catch {}
@@ -40044,13 +40199,14 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
       (F.raceN++, is4 ? (F.r400N++, (F.r400Best = F.r400Best ? Math.min(F.r400Best, time) : time)) : (F.r100N++, (F.r100Best = F.r100Best ? Math.min(F.r100Best, time) : time)));
       isBest && ((f[key] = time), rsFpSave(F.code, f));
       this.result = { time, rank, all, perfect: !!this.perfect, react: this.react };
-      let pay = (is4 ? F.r400N : F.r100N) <= RS_FP_QUIZ_CAP,
+      rsFpRoundSave(a);
+      let pay = (is4 ? F.capBase.r400 + F.r400N : F.capBase.r100 + F.r100N) <= RS_FP_QUIZ_CAP, // v3.8.0：代幣次數算整輪
         intro = T(
           "div",
           {},
           T("div", {}, `你跑了 ${time.toFixed(1)} 秒，第 ${rank} 名（共 4 人）。` + (isBest ? "這是你的新紀錄！" : `你的最佳紀錄是 ${f[key].toFixed(1)} 秒。`)),
           T("ol", { class: "fp-rank", id: "fp-race-rank" }, ...all.map((x, i) => T("li", { class: x.me ? "me" : "" }, T("span", {}, `第 ${i + 1} 名`), T("span", {}, x.name), T("span", {}, `${x.t.toFixed(1)} 秒`)))),
-          pay ? null : T("div", {}, `（這次自由活動的 ${len} 公尺代幣已經拿完，還是可以挑戰自己的紀錄。）`),
+          pay ? null : T("div", {}, `（這一輪的 ${len} 公尺代幣已經拿完，還是可以挑戰自己的紀錄。再完成一節，就有新的一輪。）`),
         ),
         steps;
       if (is4) {
@@ -40136,9 +40292,10 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     let f = rsFpGet(F.code),
       isBest = made > f.bestHoop;
     (F.hoopN++, (F.hoopBest = Math.max(F.hoopBest, made)), isBest && ((f.bestHoop = made), rsFpSave(F.code, f)));
-    let pay = F.hoopN <= RS_FP_QUIZ_CAP,
+    rsFpRoundSave(a);
+    let pay = F.capBase.hoop + F.hoopN <= RS_FP_QUIZ_CAP, // v3.8.0：代幣次數算整輪
       miss = 10 - made,
-      intro = `投 10 球，進了 ${made} 球。` + (isBest ? "這是你的新紀錄！" : `你的最佳紀錄是 10 球進 ${f.bestHoop} 球。`) + (pay ? "" : "（這次自由活動的投籃代幣已經拿完，還是可以挑戰自己的紀錄。）"),
+      intro = `投 10 球，進了 ${made} 球。` + (isBest ? "這是你的新紀錄！" : `你的最佳紀錄是 10 球進 ${f.bestHoop} 球。`) + (pay ? "" : "（這一輪的投籃代幣已經拿完，還是可以挑戰自己的紀錄。）"),
       R = (x, y) => `${x}：${y}`,
       steps = [
         {
@@ -40233,7 +40390,7 @@ var TEACHER_ORDER = ["pe_male_01", "pe_female_01", "pe_male_02", "pe_female_02"]
     api || (stage.style.display = "none");
   }
   window.__fpHoop = rsFpHoopEnd; // 測試用
-  window.__rsFp = { get: rsFpGet, save: rsFpSave, items: RS_FP_ITEMS, cats: RS_FP_CATS, stickers: RS_FP_STICKERS, spots: RS_FP_SPOTS, cos: rsFpCos, ab: rsFpAb, merge: rsFpMerge, raceAt: RS_FP_RACE_AT, trackPt: rsFpTrackPt, laneR: rsFpLaneR, start: rsFpStart, end: rsFpEnd, taskCoin: rsFpTaskCoin, on: rsFpOn, collect: rsFpCollect }; // 測試用
+  window.__rsFp = { round: rsFpRoundGet, roundLeft: rsFpRoundLeft, roundSave: rsFpRoundSave, get: rsFpGet, save: rsFpSave, items: RS_FP_ITEMS, cats: RS_FP_CATS, stickers: RS_FP_STICKERS, spots: RS_FP_SPOTS, cos: rsFpCos, ab: rsFpAb, merge: rsFpMerge, raceAt: RS_FP_RACE_AT, trackPt: rsFpTrackPt, laneR: rsFpLaneR, start: rsFpStart, end: rsFpEnd, taskCoin: rsFpTaskCoin, on: rsFpOn, collect: rsFpCollect }; // 測試用
   // v3.4.0：平板畫面放大後縮不回來
   // 原因：連點兩下按鈕會讓 iPad 放大；而轉視角時擋掉了兩指縮放，學生就縮不回來。
   // 做法：1. 全頁不接受「點兩下放大」；2. 畫面已經放大時，不擋兩指縮放；3. 放大停住超過 1 秒，自動縮回原本大小。
